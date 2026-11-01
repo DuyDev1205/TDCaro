@@ -9,6 +9,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Mới:** thanh tiêu đề và viền cửa sổ màu đen (Windows 10/11)
 - **Mới:** chế độ toàn màn hình — nhấn `F11` / `Alt+Enter` hoặc nút *Toàn màn hình* (menu và trong ván)
 - Giao diện mới hoàn toàn (pygame-ce): menu, bàn cờ 3D, hiệu ứng, 4 giao diện màu, âm thanh
 - 4 mức độ AI: **Dễ** (thuật toán gốc) · **Bình thường** · **Khó** · **Cực khó**

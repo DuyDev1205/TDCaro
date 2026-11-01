@@ -1793,6 +1793,30 @@ def _enable_dpi_awareness():
         pass
 
 
+def _dark_title_bar():
+    """Windows 10/11: thanh tieu de + vien cua so mau den (DWM)."""
+    if sys.platform != 'win32':
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        hwnd = wintypes.HWND(pygame.display.get_wm_info()['window'])
+        dwm = ctypes.windll.dwmapi
+
+        def setattr_(attr, value):
+            v = ctypes.c_int(value)
+            return dwm.DwmSetWindowAttribute(hwnd, attr, ctypes.byref(v), ctypes.sizeof(v))
+        # che do toi (Win10 1809+: 19, Win10 20H1+/Win11: 20)
+        if setattr_(20, 1) != 0:
+            setattr_(19, 1)
+        # Win11: mau thanh tieu de / vien / chu (COLORREF 0x00BBGGRR)
+        setattr_(35, 0x000000)   # DWMWA_CAPTION_COLOR = den
+        setattr_(34, 0x000000)   # DWMWA_BORDER_COLOR = den
+        setattr_(36, 0xFFFFFF)   # DWMWA_TEXT_COLOR = trang
+    except Exception:
+        pass
+
+
 def resource_path(name):
     # exe: thu muc giai nen cua PyInstaller; ma nguon: thu muc goc du an (cha cua src/)
     base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1830,6 +1854,7 @@ class App:
             pass
         self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
         pygame.display.set_caption('TDCaro')
+        _dark_title_bar()
         try:
             pygame.Window.from_display_module().minimum_size = (900, 600)
         except Exception:
@@ -1897,6 +1922,7 @@ class App:
                 if getattr(self, '_windowed_size', None):
                     win.size = self._windowed_size
                     win.position = pygame.WINDOWPOS_CENTERED
+                _dark_title_bar()
         except Exception:
             pygame.display.toggle_fullscreen()
         self.fullscreen = target
