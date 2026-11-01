@@ -57,7 +57,7 @@
 | **Dễ** | Thuật toán **gốc** của đồ án (`best_move` / `stupid_score`): tham lam 1 nước, chấm điểm tấn công + phòng thủ theo các cửa sổ 5 ô. |
 | **Bình thường** | Vẫn dùng hàm chấm điểm gốc, thêm **luật ưu tiên** (thắng ngay › chặn 5 › tạo bốn mở › chặn ba mở), khai cuộc ở tâm và kiểm tra để không đi nước khiến đối thủ có chuỗi "bốn" ép thắng (VCF). |
 | **Khó** | Đánh giá theo **mẫu hình** (năm, bốn mở, bốn, ba mở, ba, hai…), tìm chuỗi ép thắng **VCF**, lọc nước nguy hiểm, **Minimax + cắt tỉa Alpha-Beta** sâu ~6 nước với beam search. |
-| **Cực khó** | Như Khó + tìm chuỗi đe dọa **VCT** (ba/bốn liên tiếp), chủ động phá VCF/VCT của người chơi, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**, suy nghĩ khoảng 1–2 giây/nước. |
+| **Cực khó** | Như Khó + tìm chuỗi đe dọa **VCT** (ba/bốn liên tiếp), chủ động phá VCF/VCT của người chơi, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**, suy nghĩ khoảng 2 giây/nước (Khó: ~0,8 giây). |
 
 Mã nguồn AI gốc nằm nguyên vẹn trong [`src/Finals.py`](src/Finals.py); các mức mới nằm trong [`src/ai_engine_v2.py`](src/ai_engine_v2.py).
 

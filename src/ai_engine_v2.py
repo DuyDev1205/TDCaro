@@ -727,7 +727,7 @@ def _search_level(grid, col, level):
         return op
     t_start = time.perf_counter()
     expert = (level == 'expert')
-    budget = 1.8 if expert else 0.6      # tong thoi gian suy nghi toi da (giay)
+    budget = 2.2 if expert else 0.8      # tong thoi gian suy nghi toi da (giay)
     mv, scored, opp_open = _tactical(eng, me)
     if mv is not None:
         return eng.rc(mv)
