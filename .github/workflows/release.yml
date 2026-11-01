@@ -19,7 +19,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-          gh release create "$GITHUB_REF_NAME" --title "TDCaro $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" --title "TDCaro $GITHUB_REF_NAME" --notes-file .github/RELEASE_NOTES.md
 
   windows:
     needs: create-release
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: python tools/set_version.py "${GITHUB_REF_NAME#v}"
       - name: Build exe
-        run: pyinstaller --noconfirm --clean TDCaro.spec
+        run: pyinstaller --noconfirm --clean packaging/TDCaro.spec
       - name: Rename
         shell: bash
         run: mv dist/TDCaro.exe "dist/TDCaro-${GITHUB_REF_NAME}-Windows.exe"
@@ -75,7 +75,7 @@ jobs:
       - name: Build .app
         run: |
           export APP_VERSION="${GITHUB_REF_NAME#v}"
-          pyinstaller --noconfirm --clean TDCaro_mac.spec
+          pyinstaller --noconfirm --clean packaging/TDCaro_mac.spec
       - name: Build .dmg
         run: |
           mkdir -p dmg

@@ -62,6 +62,21 @@ def _classify(s):
     return t
 
 
+# Tra cuu nhanh: chuoi gia tri o (bytes 0..3) -> ky tu theo goc nhin cua tung phe (chay bang C)
+_BT = {1: bytes.maketrans(b'\x00\x01\x02\x03', b'_xoo'), 2: bytes.maketrans(b'\x00\x01\x02\x03', b'_oxo')}
+_fast_cache = {}
+
+
+def _classify_key(key):
+    """key: bytes 11 ky tu, o giua dang '_' -> coi nhu quan vua dat."""
+    t = _fast_cache.get(key)
+    if t is None:
+        s = key.decode()
+        t = _classify(s[:5] + 'x' + s[6:])
+        _fast_cache[key] = t
+    return t
+
+
 _TV = (0, 10, 45, 60, 450, 700, 6000, 200000)
 
 
@@ -154,6 +169,7 @@ class Engine:
                     self.stones_of[v].append(i)
         self.cells = cells
         self.dirs = (1, W, W + 1, W - 1)
+        self.dir_offs = [tuple(k * d for k in _OFFS) for d in self.dirs]
         self.near = [dr * W + dc for dr in (-1, 0, 1) for dc in (-1, 0, 1) if dr or dc] + \
                     [2 * dr * W + 2 * dc for dr in (-1, 0, 1) for dc in (-1, 0, 1) if dr or dc]
         self.center = ((n // 2) + PAD) * W + (n // 2) + PAD
@@ -241,13 +257,30 @@ class Engine:
     # ---------------- mau hinh
     def types_at(self, i, p):
         c = self.cells
-        m = _MAPS[p]
-        c[i] = p
+        bt = _BT[p]
+        fc = _fast_cache
         out = []
-        for d in self.dirs:
-            out.append(_classify(''.join([m[c[i + k * d]] for k in _OFFS])))
-        c[i] = 0
+        for offs in self.dir_offs:
+            key = bytes([c[i + o] for o in offs]).translate(bt)
+            t = fc.get(key)
+            out.append(t if t is not None else _classify_key(key))
         return out
+
+    def types_both(self, i):
+        """Mau hinh tai o i cho ca 2 phe (doc ban co 1 lan)."""
+        c = self.cells
+        b1, b2 = _BT[1], _BT[2]
+        fc = _fast_cache
+        t1, t2 = [], []
+        for offs in self.dir_offs:
+            raw = bytes([c[i + o] for o in offs])
+            k1 = raw.translate(b1)
+            k2 = raw.translate(b2)
+            a = fc.get(k1)
+            b = fc.get(k2)
+            t1.append(a if a is not None else _classify_key(k1))
+            t2.append(b if b is not None else _classify_key(k2))
+        return t1, t2
 
     def type_dir(self, i, p, d):
         c = self.cells
@@ -268,11 +301,10 @@ class Engine:
         return out
 
     def ordered(self, p, jitter=0.0):
-        o = 3 - p
         res = []
         for i in self.candidates():
-            ta = self.types_at(i, p)
-            td = self.types_at(i, o)
+            t1, t2 = self.types_both(i)
+            ta, td = (t1, t2) if p == 1 else (t2, t1)
             sc = _tval(ta) + 0.9 * _tval(td)
             if jitter:
                 sc += random.random() * jitter
@@ -695,18 +727,18 @@ def _search_level(grid, col, level):
         return op
     t_start = time.perf_counter()
     expert = (level == 'expert')
-    budget = 4.0 if expert else 1.2
+    budget = 1.8 if expert else 0.6      # tong thoi gian suy nghi toi da (giay)
     mv, scored, opp_open = _tactical(eng, me)
     if mv is not None:
         return eng.rc(mv)
     if not scored:
         return None
     # 1) tu tim chuoi ep thang
-    v = eng.try_vcf(me, 16 if expert else 10, 0.6 if expert else 0.25)
+    v = eng.try_vcf(me, 16 if expert else 10, 0.25 if expert else 0.12)
     if v is not None:
         return eng.rc(v)
     if expert and not opp_open:
-        v = eng.try_vct(me, 3, 0.7)
+        v = eng.try_vct(me, 3, 0.3)
         if v is not None:
             return eng.rc(v)
     # 2) cac nuoc goc
@@ -717,14 +749,14 @@ def _search_level(grid, col, level):
     # 3) loai nuoc de doi thu co chuoi ep thang: VCF (kho + cuc kho), VCT (cuc kho)
     if len(root) > 1:
         safe = []
-        lim = time.perf_counter() + (0.8 if expert else 0.4)
+        lim = time.perf_counter() + (0.35 if expert else 0.18)
         for m in root:
             if time.perf_counter() > lim:
                 safe.append(m)
                 continue
             eng.place(m, me)
             try:
-                bad = eng.try_vcf(op_, 16 if expert else 12, 0.1) is not None
+                bad = eng.try_vcf(op_, 16 if expert else 12, 0.05) is not None
             finally:
                 eng.undo(m, me)
             if not bad:
@@ -733,14 +765,14 @@ def _search_level(grid, col, level):
             root = safe
     if expert and len(root) > 1:
         safe = []
-        lim = time.perf_counter() + 1.0
+        lim = time.perf_counter() + 0.35
         for m in root[:8]:
             if time.perf_counter() > lim:
                 safe.append(m)
                 continue
             eng.place(m, me)
             try:
-                bad = eng.try_vct(op_, 2, 0.15) is not None
+                bad = eng.try_vct(op_, 2, 0.06) is not None
             finally:
                 eng.undo(m, me)
             if not bad:
@@ -758,7 +790,7 @@ def _search_level(grid, col, level):
         eng.beam = (10, 8, 6, 5, 4, 4)
         eng.max_ply = 10
         max_depth = 6
-    remain = max(0.3, budget - (time.perf_counter() - t_start))
+    remain = max(0.15, budget - (time.perf_counter() - t_start))
     best = eng.root_search(me, root, max_depth, remain)
     return eng.rc(best)
 

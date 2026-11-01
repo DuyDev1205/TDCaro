@@ -5,8 +5,8 @@ TDCARO  -  giao dien pygame-ce
 - Phan AI ENGINE (tinh toan caro) duoc giu NGUYEN VAN tu ban cu.
 - Phan giao dien duoc viet lai hoan toan bang pygame-ce.
 
-Chay:        python Finals.py
-Build .exe:  build_exe.bat   (hoac: pyinstaller TDCaro.spec)
+Chay:        python src/Finals.py
+Build .exe:  packaging/build_exe.bat   (hoac: pyinstaller packaging/TDCaro.spec)
 """
 import os
 import sys
@@ -1783,13 +1783,14 @@ def _enable_dpi_awareness():
 
 
 def resource_path(name):
-    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    # exe: thu muc giai nen cua PyInstaller; ma nguon: thu muc goc du an (cha cua src/)
+    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(base, name)
 
 
 def make_icon():
     try:
-        return pygame.image.load(resource_path('icon.png'))
+        return pygame.image.load(resource_path(os.path.join('assets', 'icon.png')))
     except Exception:
         pass
     s = pygame.Surface((64, 64), pygame.SRCALPHA, 32)
@@ -1918,7 +1919,9 @@ class App:
         clock = pygame.time.Clock()
         self._last_size = self.size
         while self.running:
-            dt = min(clock.tick(60) / 1000.0, 0.05)
+            thinking = self.state == 'game' and (self.game.ai_job or self.game.hint_job)
+            # khi AI dang nghi: giam FPS de nhuong CPU (GIL) cho luong AI
+            dt = min(clock.tick(30 if thinking else 60) / 1000.0, 0.05)
             self.frame(pygame.event.get(), dt)
             pygame.display.flip()
         pygame.quit()

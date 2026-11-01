@@ -9,8 +9,8 @@ env/
 build/
 dist/
 
-# Ban sao luu giao dien tkinter cu
-Finals_tkinter_backup.py
+# Ma nguon cu (tkinter / turtle), chi giu o may
+legacy/
 
 # Editor / OS
 .vscode/

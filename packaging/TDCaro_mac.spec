@@ -1,14 +1,15 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build tren macOS:  pyinstaller TDCaro_mac.spec   ->  dist/TDCaro.app
+# Build (macOS), chay tu thu muc goc:  pyinstaller packaging/TDCaro_mac.spec  ->  dist/TDCaro.app
 import os
 
+ROOT = os.path.abspath(os.path.join(SPECPATH, '..'))
 VERSION = os.environ.get('APP_VERSION', '1.0.0')
 
 a = Analysis(
-    ['Finals.py'],
-    pathex=[],
+    [os.path.join(ROOT, 'src', 'Finals.py')],
+    pathex=[os.path.join(ROOT, 'src')],
     binaries=[],
-    datas=[('icon.png', '.')],
+    datas=[(os.path.join(ROOT, 'assets', 'icon.png'), 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -36,7 +37,7 @@ coll = COLLECT(exe, a.binaries, a.datas, strip=False, upx=False, name='TDCaro')
 app = BUNDLE(
     coll,
     name='TDCaro.app',
-    icon='icon.png',
+    icon=os.path.join(ROOT, 'assets', 'icon.png'),
     bundle_identifier='com.duydev.tdcaro',
     info_plist={
         'CFBundleDisplayName': 'TDCaro',

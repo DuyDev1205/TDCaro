@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.png" width="160" alt="TDCaro">
+  <img src="assets/icon.png" width="160" alt="TDCaro">
 </p>
 
 <h1 align="center">TDCaro</h1>
@@ -57,9 +57,9 @@
 | **Dễ** | Thuật toán **gốc** của đồ án (`best_move` / `stupid_score`): tham lam 1 nước, chấm điểm tấn công + phòng thủ theo các cửa sổ 5 ô. |
 | **Bình thường** | Vẫn dùng hàm chấm điểm gốc, thêm **luật ưu tiên** (thắng ngay › chặn 5 › tạo bốn mở › chặn ba mở), khai cuộc ở tâm và kiểm tra để không đi nước khiến đối thủ có chuỗi "bốn" ép thắng (VCF). |
 | **Khó** | Đánh giá theo **mẫu hình** (năm, bốn mở, bốn, ba mở, ba, hai…), tìm chuỗi ép thắng **VCF**, lọc nước nguy hiểm, **Minimax + cắt tỉa Alpha-Beta** sâu ~6 nước với beam search. |
-| **Cực khó** | Như Khó + tìm chuỗi đe dọa **VCT** (ba/bốn liên tiếp), chủ động phá VCF/VCT của người chơi, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**, thời gian suy nghĩ tới ~4 giây/nước. |
+| **Cực khó** | Như Khó + tìm chuỗi đe dọa **VCT** (ba/bốn liên tiếp), chủ động phá VCF/VCT của người chơi, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**, suy nghĩ khoảng 1–2 giây/nước. |
 
-Mã nguồn AI gốc nằm nguyên vẹn trong [`Finals.py`](Finals.py); các mức mới nằm trong [`ai_engine_v2.py`](ai_engine_v2.py).
+Mã nguồn AI gốc nằm nguyên vẹn trong [`src/Finals.py`](src/Finals.py); các mức mới nằm trong [`src/ai_engine_v2.py`](src/ai_engine_v2.py).
 
 ### So sánh sức mạnh (AI đấu AI, bàn 15×15)
 
@@ -77,23 +77,26 @@ Chạy lại: `python tools/benchmark.py 10 15`
 python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-python Finals.py
+python src/Finals.py
 ```
 
 ## Build
 
-- **Windows:** chạy `build_exe.bat` → `dist/TDCaro.exe`
-- **macOS:** `pyinstaller TDCaro_mac.spec` → `dist/TDCaro.app`
+- **Windows:** chạy `packaginguild_exe.bat` → `dist/TDCaro.exe`
+- **macOS:** `pyinstaller packaging/TDCaro_mac.spec` → `dist/TDCaro.app`
 - **Tự động:** push một tag dạng `v1.2.3` → GitHub Actions build `.exe` + `.dmg` và đăng lên Releases.
 
 ## Cấu trúc
 
 ```
-Finals.py           Giao diện pygame-ce + AI gốc (mức Dễ)
-ai_engine_v2.py     AI nâng cao (Bình thường / Khó / Cực khó)
-updater.py          Tự động cập nhật qua GitHub Releases
-tools/benchmark.py  Cho các mức AI đấu nhau
-TDCaro.spec       Cấu hình PyInstaller (Windows)
-TDCaro_mac.spec   Cấu hình PyInstaller (macOS)
-.github/workflows/  CI build & release
+src/
+  Finals.py           Giao diện pygame-ce + AI gốc (mức Dễ) — chạy file này
+  ai_engine_v2.py     AI nâng cao (Bình thường / Khó / Cực khó)
+  updater.py          Tự động cập nhật qua GitHub Releases
+assets/               Icon (.ico / .png)
+packaging/            Cấu hình PyInstaller (Windows / macOS) + build_exe.bat
+tools/
+  benchmark.py        Cho các mức AI đấu nhau
+  set_version.py      Ghi số phiên bản (dùng trong CI)
+.github/workflows/    CI build & release (.exe + .dmg)
 ```

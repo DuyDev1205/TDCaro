@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Finals.py')
+path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src', 'Finals.py')
 ver = sys.argv[1]
 src = open(path, encoding='utf-8').read()
 src, n = re.subn(r"^APP_VERSION = '[^']*'", f"APP_VERSION = '{ver}'", src, flags=re.M)

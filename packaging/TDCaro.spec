@@ -1,12 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build:  pyinstaller TDCaro.spec   ->  dist/TDCaro.exe
+# Build (Windows), chay tu thu muc goc:  pyinstaller packaging/TDCaro.spec  ->  dist/TDCaro.exe
+import os
 
+ROOT = os.path.abspath(os.path.join(SPECPATH, '..'))
 
 a = Analysis(
-    ['Finals.py'],
-    pathex=[],
+    [os.path.join(ROOT, 'src', 'Finals.py')],
+    pathex=[os.path.join(ROOT, 'src')],
     binaries=[],
-    datas=[('icon.png', '.')],
+    datas=[(os.path.join(ROOT, 'assets', 'icon.png'), 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -36,5 +38,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['icon.ico'],
+    icon=[os.path.join(ROOT, 'assets', 'icon.ico')],
 )
