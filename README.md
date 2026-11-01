@@ -57,17 +57,22 @@
 | **Dễ** | Thuật toán **gốc** của đồ án (`best_move` / `stupid_score`): tham lam 1 nước, chấm điểm tấn công + phòng thủ theo các cửa sổ 5 ô. |
 | **Bình thường** | Vẫn dùng hàm chấm điểm gốc, thêm **luật ưu tiên** (thắng ngay › chặn 5 › tạo bốn mở › chặn ba mở), khai cuộc ở tâm và kiểm tra để không đi nước khiến đối thủ có chuỗi "bốn" ép thắng (VCF). |
 | **Khó** | Đánh giá theo **mẫu hình** (năm, bốn mở, bốn, ba mở, ba, hai…), tìm chuỗi ép thắng **VCF**, lọc nước nguy hiểm, **Minimax + cắt tỉa Alpha-Beta** sâu ~6 nước với beam search. |
-| **Cực khó** | Như Khó + tìm chuỗi đe dọa **VCT** (ba/bốn liên tiếp), chủ động phá VCF/VCT của người chơi, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**, suy nghĩ khoảng 2 giây/nước (Khó: ~0,8 giây). |
+| **Cực khó** | Như Khó nhưng tìm VCF sâu hơn (cả của mình lẫn của người chơi), beam rộng hơn, **đào sâu dần** (iterative deepening) tới 12 nước, **bảng chuyển vị Zobrist**. Suy nghĩ ~2,2 giây/nước (Khó: ~0,8 giây). |
 
 Mã nguồn AI gốc nằm nguyên vẹn trong [`src/Finals.py`](src/Finals.py); các mức mới nằm trong [`src/ai_engine_v2.py`](src/ai_engine_v2.py).
 
 ### So sánh sức mạnh (AI đấu AI, bàn 15×15)
 
-| Trận (10 ván, đổi lượt đi trước) | Thắng | Thua | Hòa |
-|---|:-:|:-:|:-:|
-| Bình thường vs Dễ | 2 | 0 | 8 |
-| Khó vs Dễ | 9 | 1 | 0 |
-| Khó vs Bình thường | 7 | 3 | 0 |
+| Trận (đổi lượt đi trước mỗi ván) | Số ván | Thắng | Thua | Hòa |
+|---|:-:|:-:|:-:|:-:|
+| Bình thường vs Dễ | 10 | 2 | 0 | 8 |
+| Khó vs Dễ | 20 | 16 | 4 | 0 |
+| Khó vs Bình thường | 20 | 16 | 4 | 0 |
+| Cực khó vs Dễ | 20 | 17 | 2 | 1 |
+| Cực khó vs Bình thường | 20 | 17 | 3 | 0 |
+| **Cực khó vs Khó** | 20 | **13** | 7 | 0 |
+
+> Caro luật tự do có lợi thế lớn cho người đi trước, nên ngay cả mức yếu hơn đôi khi vẫn thắng khi được đi trước.
 
 Chạy lại: `python tools/benchmark.py 10 15`
 

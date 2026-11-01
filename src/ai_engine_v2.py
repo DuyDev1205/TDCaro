@@ -9,8 +9,8 @@ File nay bo sung 3 muc:
                          (thang ngay > chan 5 > tao 4 mo > chan 3 mo) + khai cuoc o tam.
   hard    (Kho)        : danh gia theo mau hinh (bon mo, bon, ba mo, ...),
                          tim chuoi ep thang VCF, alpha-beta ~4 nuoc voi beam search.
-  expert  (Cuc kho)    : nhu hard + VCT (chuoi de doa ba/bon), chu dong pha VCF cua doi thu,
-                         alpha-beta dao sau dan (iterative deepening) + bang chuyen vi Zobrist.
+  expert  (Cuc kho)    : nhu hard nhung tim VCF sau hon, beam rong hon, alpha-beta dao sau dan
+                         (iterative deepening) toi 12 nuoc + bang chuyen vi Zobrist, ~2.2 giay/nuoc.
 
 API:  choose_move(grid, col, level, base_score=None, base_moves=None) -> (row, col)
       grid: list[list[str]] voi ' ', 'r', 'w'  (giong ban co cua Finals.py)
@@ -726,53 +726,57 @@ def _search_level(grid, col, level):
     if op:
         return op
     t_start = time.perf_counter()
-    expert = (level == 'expert')
-    budget = 2.2 if expert else 0.8      # tong thoi gian suy nghi toi da (giay)
+    cfg = LEVEL_CFG[level]
+    budget = cfg['budget']               # tong thoi gian suy nghi toi da (giay)
     mv, scored, opp_open = _tactical(eng, me)
     if mv is not None:
         return eng.rc(mv)
     if not scored:
         return None
     # 1) tu tim chuoi ep thang
-    v = eng.try_vcf(me, 16 if expert else 10, 0.25 if expert else 0.12)
+    d, t = cfg['vcf_self']
+    v = eng.try_vcf(me, d, t)
     if v is not None:
         return eng.rc(v)
-    if expert and not opp_open:
-        v = eng.try_vct(me, 3, 0.3)
+    if cfg['vct_self'] and not opp_open:
+        d, t = cfg['vct_self']
+        v = eng.try_vct(me, d, t)
         if v is not None:
             return eng.rc(v)
     # 2) cac nuoc goc
     if opp_open:
         root = [i for sc, i, ta, td in scored if i in set(opp_open) or FOUR in ta]
     else:
-        root = [i for sc, i, ta, td in scored[:16 if expert else 12]]
-    # 3) loai nuoc de doi thu co chuoi ep thang: VCF (kho + cuc kho), VCT (cuc kho)
+        root = [i for sc, i, ta, td in scored[:cfg['root_k']]]
+    # 3) loai nuoc de doi thu co chuoi ep thang (VCF, va VCT neu bat)
     if len(root) > 1:
+        d, per, total = cfg['vcf_filter']
         safe = []
-        lim = time.perf_counter() + (0.35 if expert else 0.18)
+        lim = time.perf_counter() + total
         for m in root:
             if time.perf_counter() > lim:
                 safe.append(m)
                 continue
             eng.place(m, me)
             try:
-                bad = eng.try_vcf(op_, 16 if expert else 12, 0.05) is not None
+                bad = eng.try_vcf(op_, d, per) is not None
             finally:
                 eng.undo(m, me)
             if not bad:
                 safe.append(m)
         if safe:
             root = safe
-    if expert and len(root) > 1:
+    if cfg['vct_filter'] and len(root) > 1:
+        d, per, total = cfg['vct_filter']
         safe = []
-        lim = time.perf_counter() + 0.35
+        lim = time.perf_counter() + total
         for m in root[:8]:
             if time.perf_counter() > lim:
                 safe.append(m)
                 continue
             eng.place(m, me)
             try:
-                bad = eng.try_vct(op_, 2, 0.06) is not None
+                bad = eng.try_vct(op_, d, per) is not None
             finally:
                 eng.undo(m, me)
             if not bad:
@@ -782,17 +786,23 @@ def _search_level(grid, col, level):
     if len(root) == 1:
         return eng.rc(root[0])
     # 4) alpha-beta dao sau dan
-    if expert:
-        eng.beam = (16, 12, 10, 8, 7, 6, 5, 5, 4, 4, 4, 4)
-        eng.max_ply = 18
-        max_depth = 12
-    else:
-        eng.beam = (10, 8, 6, 5, 4, 4)
-        eng.max_ply = 10
-        max_depth = 6
+    eng.beam = cfg['beam']
+    eng.max_ply = cfg['max_ply']
     remain = max(0.15, budget - (time.perf_counter() - t_start))
-    best = eng.root_search(me, root, max_depth, remain)
+    best = eng.root_search(me, root, cfg['max_depth'], remain)
     return eng.rc(best)
+
+
+# Cau hinh tung muc (co the chinh de can bang suc manh / toc do)
+LEVEL_CFG = {
+    'hard': dict(budget=0.8, vcf_self=(10, 0.12), vct_self=None, root_k=12,
+                 vcf_filter=(12, 0.05, 0.18), vct_filter=None,
+                 beam=(10, 8, 6, 5, 4, 4), max_ply=10, max_depth=6),
+    # VCT da thu nghiem nhung lam AI yeu di (bao thang sai -> loai nham nuoc tot), nen tat.
+    'expert': dict(budget=2.2, vcf_self=(16, 0.25), vct_self=None, root_k=16,
+                   vcf_filter=(16, 0.05, 0.35), vct_filter=None,
+                   beam=(16, 12, 10, 8, 7, 6, 5, 5, 4, 4, 4, 4), max_ply=18, max_depth=12),
+}
 
 
 def choose_move(grid, col, level, base_score=None, base_moves=None):
