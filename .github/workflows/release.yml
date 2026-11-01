@@ -1,0 +1,94 @@
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+          gh release create "$GITHUB_REF_NAME" --title "TDCaro $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+
+  windows:
+    needs: create-release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: python tools/set_version.py "${GITHUB_REF_NAME#v}"
+      - name: Build exe
+        run: pyinstaller --noconfirm --clean TDCaro.spec
+      - name: Rename
+        shell: bash
+        run: mv dist/TDCaro.exe "dist/TDCaro-${GITHUB_REF_NAME}-Windows.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/*.exe
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/*.exe --clobber
+
+  macos:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            arch: AppleSilicon
+          - runner: macos-15-intel
+            arch: Intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt pillow
+      - name: Set version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: python tools/set_version.py "${GITHUB_REF_NAME#v}"
+      - name: Build .app
+        run: |
+          export APP_VERSION="${GITHUB_REF_NAME#v}"
+          pyinstaller --noconfirm --clean TDCaro_mac.spec
+      - name: Build .dmg
+        run: |
+          mkdir -p dmg
+          cp -R "dist/TDCaro.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "TDCaro" -srcfolder dmg -ov -format UDZO \
+            "TDCaro-${GITHUB_REF_NAME}-macOS-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-dmg
+          path: '*.dmg'
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" *.dmg --clobber

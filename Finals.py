@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-CARO AI CHALLENGE  -  giao dien pygame-ce
+TDCARO  -  giao dien pygame-ce
 =========================================
 - Phan AI ENGINE (tinh toan caro) duoc giu NGUYEN VAN tu ban cu.
 - Phan giao dien duoc viet lai hoan toan bang pygame-ce.
 
 Chay:        python Finals.py
-Build .exe:  build_exe.bat   (hoac: pyinstaller CaroGame.spec)
+Build .exe:  build_exe.bat   (hoac: pyinstaller TDCaro.spec)
 """
 import os
 import sys
@@ -239,6 +239,22 @@ def best_move(b, col):
 # ==========================================================================
 # ======================  GIAO DIEN MOI (pygame-ce)  =======================
 # ==========================================================================
+
+import ai_engine_v2
+import updater
+
+APP_VERSION = '1.0.0'
+
+LEVELS = [('easy', 'Dễ'), ('normal', 'Bình thường'), ('hard', 'Khó'), ('expert', 'Cực khó')]
+LEVEL_NAMES = dict(LEVELS)
+
+
+def ai_move(board, col, level):
+    """Chon nuoc theo do kho. 'easy' = AI GOC (best_move) giu nguyen."""
+    if level == 'easy':
+        return best_move(board, col)
+    return ai_engine_v2.choose_move(board, col, level, base_score=stupid_score, base_moves=possible_moves)
+
 
 COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O']
 MIN_SIZE, MAX_SIZE = 5, 15
@@ -892,9 +908,13 @@ class MenuScreen:
                                   selected=lambda: st['first'] == 'player', icon=lambda th: ('x', px(18)))
         self.btn_first_a = Button('AI đi trước', lambda: self.set_first('ai'), style='chip', font_size=14,
                                   selected=lambda: st['first'] == 'ai', icon=lambda th: ('o', px(18)))
+        self.level_chips = [Button(name, (lambda k=k: self.set_level(k)), style='chip', font_size=13,
+                                   selected=(lambda k=k: st['level'] == k)) for k, name in LEVELS]
         self.swatches = [ThemeSwatch(k, app) for k in THEME_KEYS]
-        self.buttons = ([self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
-                         self.btn_first_p, self.btn_first_a] + self.chips + self.swatches)
+        self.btn_update = Button(lambda: app.updater.label(), app.updater.start, 'primary', font_size=13,
+                                 radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
+        self.buttons = ([self.btn_update, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
+                         self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.swatches)
         self.size_pulse = 0.0
         self.want_hand = False
 
@@ -910,6 +930,14 @@ class MenuScreen:
     def set_first(self, who):
         self.app.settings['first'] = who
 
+    def set_level(self, k):
+        self.app.settings['level'] = k
+
+    def cycle_level(self):
+        keys = [k for k, _ in LEVELS]
+        i = keys.index(self.app.settings['level'])
+        self.set_level(keys[(i + 1) % len(keys)])
+
     # ---- layout
     def layout(self):
         W, H = self.app.size
@@ -921,6 +949,7 @@ class MenuScreen:
         # right card
         pad, lbl_h, sec = px(26), px(20), px(22)
         card_h = (pad + lbl_h + px(10) + px(54) + px(12) + px(36) + sec +
+                  lbl_h + px(10) + px(40) + sec +
                   lbl_h + px(10) + px(46) + sec + lbl_h + px(10) + px(96) + pad)
         self.card = pygame.Rect(rx, (H - card_h) // 2 - px(12), colR, card_h)
         ix, iw = self.card.x + pad, self.card.w - 2 * pad
@@ -936,6 +965,13 @@ class MenuScreen:
         for i, b in enumerate(self.chips):
             b.rect = pygame.Rect(ix + i * (cw + g), y, cw, px(36))
         y += px(36) + sec
+        self.lbl_level = (ix, y)
+        y += lbl_h + px(10)
+        g3 = px(8)
+        lw = (iw - 3 * g3) // 4
+        for i, b in enumerate(self.level_chips):
+            b.rect = pygame.Rect(ix + i * (lw + g3), y, lw, px(40))
+        y += px(40) + sec
         self.lbl_first = (ix, y)
         y += lbl_h + px(10)
         hw = (iw - g) // 2
@@ -950,7 +986,7 @@ class MenuScreen:
             s.rect = pygame.Rect(ix + i * (sw + g2), y, sw, px(96))
 
         # left column
-        self.title_s = gradient_text('CARO', px(124), 'black', self.app.th['x'], self.app.th['o'])
+        self.title_s = gradient_text('TDCaro', px(108), 'black', self.app.th['x'], self.app.th['o'])
         left_h = px(84) + px(10) + self.title_s.get_height() + px(14) + px(30) + px(16) + px(48) + px(24) + px(48) + px(28) + px(60) + px(12) + px(46)
         y = (H - left_h) // 2 - px(12)
         self.ly = y
@@ -988,6 +1024,8 @@ class MenuScreen:
                 self.app.cycle_theme()
             elif k == pygame.K_f:
                 self.set_first('ai' if self.app.settings['first'] == 'player' else 'player')
+            elif k == pygame.K_d:
+                self.cycle_level()
             elif k == pygame.K_m:
                 self.app.toggle_sound()
             elif k in (pygame.K_ESCAPE, pygame.K_q):
@@ -995,6 +1033,13 @@ class MenuScreen:
 
     def update(self, dt):
         mouse = pygame.mouse.get_pos()
+        up = self.app.updater
+        if up.visible():
+            W = self.app.size[0]
+            tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
+            self.btn_update.rect = pygame.Rect(W - px(24) - tw - px(40), px(20), tw + px(40), px(40))
+        else:
+            self.btn_update.rect = pygame.Rect(0, 0, 0, 0)
         for b in self.buttons:
             b.update(dt, mouse)
         self.size_pulse = approach(self.size_pulse, 0.0, dt, 8)
@@ -1011,7 +1056,7 @@ class MenuScreen:
         bob = math.sin(now * 2.2) * px(5)
         blit_center(surf, themed_piece('x', px(68), th), (x + px(36), self.logo_y + bob))
         blit_center(surf, themed_piece('o', px(68), th), (x + px(36) + px(80), self.logo_y - bob))
-        title = gradient_text('CARO', px(124), 'black', th['x'], th['o'])
+        title = gradient_text('TDCaro', px(108), 'black', th['x'], th['o'])
         sh = title.copy()
         sh.fill((0, 0, 0, 70 if not th['dark'] else 140), special_flags=pygame.BLEND_RGBA_MULT)
         surf.blit(sh, (x + px(2), self.title_y + px(6)))
@@ -1051,14 +1096,19 @@ class MenuScreen:
         n = app.settings['size']
         fs = px(28) + int(px(6) * self.size_pulse)
         draw_text(surf, f'{n} × {n}', fs, th['accent'], sr.center, 'black', 'center')
+        draw_spaced(surf, 'ĐỘ KHÓ', px(12), th['text_dim'], self.lbl_level, 'bold')
         draw_spaced(surf, 'NGƯỜI ĐI TRƯỚC', px(12), th['text_dim'], self.lbl_first, 'bold')
         draw_spaced(surf, 'GIAO DIỆN', px(12), th['text_dim'], self.lbl_theme, 'bold')
-        for b in [self.btn_minus, self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips + self.swatches:
+        for b in ([self.btn_minus, self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips +
+                  self.level_chips + self.swatches):
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
+        draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
+        if app.updater.visible():
+            self.btn_update.draw(surf, th)
 
 
 # ================================ GAME SCREEN ===============================
@@ -1087,6 +1137,7 @@ class GameScreen:
     # ------------------------------------------------------------ state
     def reset_state(self):
         self.N = self.app.settings['size']
+        self.level = self.app.settings.get('level', 'normal')
         self.board = make_empty_board(self.N)
         self.moves = []                 # (col, row, who)  who in {'player','ai'}
         self.anim = {}
@@ -1124,21 +1175,24 @@ class GameScreen:
         self.ai_job = None
         self.hint_job = None
 
-    def _run_job(self, color):
+    def _run_job(self, color, level):
         board_copy = [row[:] for row in self.board]
         job = {'token': self.token, 'done': False, 'result': None, 't0': time.perf_counter()}
 
         def work():
             try:
-                job['result'] = best_move(board_copy, color)   # AI ENGINE GOC
+                job['result'] = ai_move(board_copy, color, level)   # 'easy' = AI ENGINE GOC
             except Exception:
-                job['result'] = None
+                try:
+                    job['result'] = best_move(board_copy, color)
+                except Exception:
+                    job['result'] = None
             job['done'] = True
         threading.Thread(target=work, daemon=True).start()
         return job
 
     def start_ai(self):
-        self.ai_job = self._run_job('w')
+        self.ai_job = self._run_job('w', self.level)
 
     def can_play(self):
         return not self.over and self.turn == 'player' and self.ai_job is None and not self.modal_visible
@@ -1151,7 +1205,7 @@ class GameScreen:
 
     def request_hint(self):
         if self.can_hint():
-            self.hint_job = self._run_job('r')
+            self.hint_job = self._run_job('r', 'hard')
 
     def place(self, c, r, who):
         self.board[r][c] = 'r' if who == 'player' else 'w'
@@ -1546,9 +1600,9 @@ class GameScreen:
         blit_center(surf, themed_piece('x', px(26), th, False), (r.x + px(13), r.centery))
         blit_center(surf, themed_piece('o', px(26), th, False), (r.x + px(37), r.centery))
         tx = r.x + px(58)
-        draw_text(surf, 'CARO AI', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
-        draw_text(surf, 'Nối 5 quân để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
-        ts = text_surf(f'{self.N} × {self.N}', px(12), th['text'], 'bold')
+        draw_text(surf, 'TDCaro', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
+        draw_text(surf, 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
+        ts = text_surf(f'{self.N}×{self.N} · {LEVEL_NAMES[self.level]}', px(12), th['text'], 'bold')
         pr = pygame.Rect(0, 0, ts.get_width() + px(20), px(28))
         pr.midright = r.midright
         surf.blit(round_rect_surf(pr.w, pr.h, px(14), th['panel_alt'], th['border'], 1), pr)
@@ -1728,7 +1782,16 @@ def _enable_dpi_awareness():
         pass
 
 
+def resource_path(name):
+    base = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, name)
+
+
 def make_icon():
+    try:
+        return pygame.image.load(resource_path('icon.png'))
+    except Exception:
+        pass
     s = pygame.Surface((64, 64), pygame.SRCALPHA, 32)
     th = THEMES['midnight']
     s.blit(round_rect_surf(64, 64, 14, th['accent']), (0, 0))
@@ -1754,17 +1817,20 @@ class App:
         except Exception:
             pass
         self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
-        pygame.display.set_caption('Caro AI Challenge')
+        pygame.display.set_caption('TDCaro')
         try:
             pygame.Window.from_display_module().minimum_size = (900, 600)
         except Exception:
             pass
 
-        self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True}
+        self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True, 'level': 'normal'}
         self.scores = {'player': 0, 'ai': 0, 'draw': 0}
         self.now = 0.0
         self.running = True
         self.sound = SoundFX(self)
+        self.updater = updater.Updater(APP_VERSION)
+        if not os.environ.get('CARO_NO_UPDATE'):
+            self.updater.check_async()
         self.floats = FloatingSymbols()
         self.menu = MenuScreen(self)
         self.game = GameScreen(self)
@@ -1834,6 +1900,8 @@ class App:
                     self.on_resize()
             else:
                 self.current.handle(ev)
+        if self.updater.want_quit:
+            self.running = False
         scr = self.current
         self.floats.update(dt)
         scr.update(dt)

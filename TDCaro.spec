@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-# Build:  pyinstaller CaroGame.spec   ->  dist/CaroGame.exe
+# Build:  pyinstaller TDCaro.spec   ->  dist/TDCaro.exe
 
 
 a = Analysis(
     ['Finals.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('icon.png', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -23,7 +23,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='CaroGame',
+    name='TDCaro',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

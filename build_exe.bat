@@ -1,12 +1,12 @@
 @echo off
-REM Build CaroGame.exe  (ket qua: dist\CaroGame.exe)
+REM Build TDCaro.exe  (ket qua: dist\TDCaro.exe)
 cd /d "%~dp0"
 if not exist .venv (
     python -m venv .venv
 )
 call .venv\Scripts\activate.bat
 python -m pip install -q -r requirements.txt
-pyinstaller --noconfirm --clean CaroGame.spec
+pyinstaller --noconfirm --clean TDCaro.spec
 echo.
-echo Xong! File exe: dist\CaroGame.exe
+echo Xong! File exe: dist\TDCaro.exe
 pause
