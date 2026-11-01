@@ -913,7 +913,9 @@ class MenuScreen:
         self.swatches = [ThemeSwatch(k, app) for k in THEME_KEYS]
         self.btn_update = Button(lambda: app.updater.label(), app.updater.start, 'primary', font_size=13,
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
-        self.buttons = ([self.btn_update, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
+        self.btn_full = Button(lambda: 'Thoát toàn màn hình' if app.fullscreen else 'Toàn màn hình',
+                               app.toggle_fullscreen, font_size=13, radius=20)
+        self.buttons = ([self.btn_update, self.btn_full, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
                          self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.swatches)
         self.size_pulse = 0.0
         self.want_hand = False
@@ -1028,16 +1030,20 @@ class MenuScreen:
                 self.cycle_level()
             elif k == pygame.K_m:
                 self.app.toggle_sound()
+            elif k == pygame.K_ESCAPE and self.app.fullscreen:
+                self.app.toggle_fullscreen()
             elif k in (pygame.K_ESCAPE, pygame.K_q):
                 self.app.quit()
 
     def update(self, dt):
         mouse = pygame.mouse.get_pos()
         up = self.app.updater
+        W = self.app.size[0]
+        fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        self.btn_full.rect = pygame.Rect(W - px(24) - fw, px(20), fw, px(40))
         if up.visible():
-            W = self.app.size[0]
             tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
-            self.btn_update.rect = pygame.Rect(W - px(24) - tw - px(40), px(20), tw + px(40), px(40))
+            self.btn_update.rect = pygame.Rect(self.btn_full.rect.x - px(12) - tw - px(40), px(20), tw + px(40), px(40))
         else:
             self.btn_update.rect = pygame.Rect(0, 0, 0, 0)
         for b in self.buttons:
@@ -1104,9 +1110,10 @@ class MenuScreen:
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   F11: toàn màn hình   ·   Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
+        self.btn_full.draw(surf, th)
         if app.updater.visible():
             self.btn_update.draw(surf, th)
 
@@ -1124,7 +1131,10 @@ class GameScreen:
         self.btn_sound = Button(lambda: 'Âm thanh: Bật' if st['sound'] else 'Âm thanh: Tắt',
                                 app.toggle_sound, hotkey='M', font_size=14)
         self.btn_menu = Button('Về menu', app.go_menu, hotkey='ESC', font_size=14)
-        self.buttons = [self.btn_new, self.btn_undo, self.btn_hint, self.btn_theme, self.btn_sound, self.btn_menu]
+        self.btn_full = Button(lambda: 'Thu nhỏ' if app.fullscreen else 'Toàn màn hình',
+                               app.toggle_fullscreen, hotkey='F11', font_size=14)
+        self.buttons = [self.btn_new, self.btn_undo, self.btn_hint, self.btn_theme, self.btn_sound, self.btn_menu,
+                        self.btn_full]
         modal_ok = lambda: self.modal_t > 0.85
         self.btn_again = Button('Ván mới', self.new_game, 'primary', 'N', enabled=modal_ok, font_size=15)
         self.btn_view = Button('Xem bàn cờ', self.hide_modal, enabled=modal_ok, font_size=15)
@@ -1321,9 +1331,10 @@ class GameScreen:
         y += px(20) + px(8)
         bh, g = px(44), px(10)
         by = p.bottom - pd - bh
-        self.btn_menu.rect = pygame.Rect(x, by, w, bh)
-        by -= bh + g
         half = (w - g) // 2
+        self.btn_menu.rect = pygame.Rect(x, by, half, bh)
+        self.btn_full.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
+        by -= bh + g
         self.btn_theme.rect = pygame.Rect(x, by, half, bh)
         self.btn_sound.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
         by -= bh + g
@@ -1837,6 +1848,7 @@ class App:
         self.game = GameScreen(self)
         self.state = 'menu'
         self.cursor_hand = None
+        self.fullscreen = False
         self.on_resize()
 
     # ---- properties / actions
@@ -1872,6 +1884,27 @@ class App:
         i = THEME_KEYS.index(self.settings['theme'])
         self.set_theme(THEME_KEYS[(i + 1) % len(THEME_KEYS)])
 
+    def toggle_fullscreen(self):
+        """Chuyen qua lai giua cua so va toan man hinh (borderless, khong doi do phan giai)."""
+        target = not self.fullscreen
+        try:
+            win = pygame.Window.from_display_module()
+            if target:
+                self._windowed_size = win.size
+                win.set_fullscreen(desktop=True)
+            else:
+                win.set_windowed()
+                if getattr(self, '_windowed_size', None):
+                    win.size = self._windowed_size
+                    win.position = pygame.WINDOWPOS_CENTERED
+        except Exception:
+            pygame.display.toggle_fullscreen()
+        self.fullscreen = target
+        self.on_resize()
+        self._last_size = self.size
+        if self.state == 'game':
+            self.game.show_toast('Toàn màn hình: ' + ('Bật' if target else 'Tắt'))
+
     def toggle_sound(self):
         self.settings['sound'] = not self.settings['sound']
         if self.state == 'game':
@@ -1899,6 +1932,9 @@ class App:
                 if pygame.display.get_surface().get_size() != getattr(self, '_last_size', None):
                     self._last_size = pygame.display.get_surface().get_size()
                     self.on_resize()
+            elif ev.type == pygame.KEYDOWN and (ev.key == pygame.K_F11 or (
+                    ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and ev.mod & pygame.KMOD_ALT)):
+                self.toggle_fullscreen()
             else:
                 self.current.handle(ev)
         if self.updater.want_quit:

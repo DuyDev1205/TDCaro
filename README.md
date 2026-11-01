@@ -22,6 +22,7 @@
 - 4 giao diện: Midnight Neon, Gỗ Cổ Điển, Đại Dương, Hoa Anh Đào
 - Hiệu ứng đặt quân, đường thắng, pháo giấy; âm thanh
 - **Đi lại** (Undo), **Gợi ý** nước đi, lịch sử nước đi, đồng hồ, tỉ số
+- **Toàn màn hình** (F11 / Alt+Enter hoặc nút trên màn hình)
 - AI chạy trên luồng riêng → giao diện không bị đơ
 - **Tự động cập nhật**: game tự kiểm tra bản mới trên GitHub Releases và cập nhật bằng một cú bấm
 
@@ -48,7 +49,8 @@
 | `H` | Gợi ý |
 | `T` | Đổi giao diện |
 | `M` | Bật/tắt âm thanh |
-| `Esc` | Về menu / thoát |
+| `F11` / `Alt+Enter` | Bật/tắt toàn màn hình |
+| `Esc` | Về menu / thoát toàn màn hình / thoát |
 
 ## Các mức độ AI
 
