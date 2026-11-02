@@ -915,7 +915,9 @@ class MenuScreen:
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
         self.btn_full = Button(lambda: 'Thoát toàn màn hình' if app.fullscreen else 'Toàn màn hình',
                                app.toggle_fullscreen, font_size=13, radius=20)
-        self.buttons = ([self.btn_update, self.btn_full, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
+        self.btn_music = Button(lambda: 'Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt',
+                                app.toggle_music, font_size=13, radius=20)
+        self.buttons = ([self.btn_update, self.btn_full, self.btn_music, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
                          self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.swatches)
         self.size_pulse = 0.0
         self.want_hand = False
@@ -1030,6 +1032,8 @@ class MenuScreen:
                 self.cycle_level()
             elif k == pygame.K_m:
                 self.app.toggle_sound()
+            elif k == pygame.K_b:
+                self.app.toggle_music()
             elif k == pygame.K_ESCAPE and self.app.fullscreen:
                 self.app.toggle_fullscreen()
             elif k in (pygame.K_ESCAPE, pygame.K_q):
@@ -1041,9 +1045,11 @@ class MenuScreen:
         W = self.app.size[0]
         fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
         self.btn_full.rect = pygame.Rect(W - px(24) - fw, px(20), fw, px(40))
+        mw = text_surf(self.btn_music.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        self.btn_music.rect = pygame.Rect(self.btn_full.rect.x - px(12) - mw, px(20), mw, px(40))
         if up.visible():
             tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
-            self.btn_update.rect = pygame.Rect(self.btn_full.rect.x - px(12) - tw - px(40), px(20), tw + px(40), px(40))
+            self.btn_update.rect = pygame.Rect(self.btn_music.rect.x - px(12) - tw - px(40), px(20), tw + px(40), px(40))
         else:
             self.btn_update.rect = pygame.Rect(0, 0, 0, 0)
         for b in self.buttons:
@@ -1110,10 +1116,11 @@ class MenuScreen:
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   F11: toàn màn hình   ·   Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   B: nhạc nền   ·   F11: toàn màn hình   ·   Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
         self.btn_full.draw(surf, th)
+        self.btn_music.draw(surf, th)
         if app.updater.visible():
             self.btn_update.draw(surf, th)
 
@@ -1133,8 +1140,10 @@ class GameScreen:
         self.btn_menu = Button('Về menu', app.go_menu, hotkey='ESC', font_size=14)
         self.btn_full = Button(lambda: 'Thu nhỏ' if app.fullscreen else 'Toàn màn hình',
                                app.toggle_fullscreen, hotkey='F11', font_size=14)
+        self.btn_music = Button(lambda: 'Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt',
+                                app.toggle_music, hotkey='B', font_size=14)
         self.buttons = [self.btn_new, self.btn_undo, self.btn_hint, self.btn_theme, self.btn_sound, self.btn_menu,
-                        self.btn_full]
+                        self.btn_full, self.btn_music]
         modal_ok = lambda: self.modal_t > 0.85
         self.btn_again = Button('Ván mới', self.new_game, 'primary', 'N', enabled=modal_ok, font_size=15)
         self.btn_view = Button('Xem bàn cờ', self.hide_modal, enabled=modal_ok, font_size=15)
@@ -1332,11 +1341,13 @@ class GameScreen:
         bh, g = px(44), px(10)
         by = p.bottom - pd - bh
         half = (w - g) // 2
-        self.btn_menu.rect = pygame.Rect(x, by, half, bh)
-        self.btn_full.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
+        self.btn_menu.rect = pygame.Rect(x, by, w, bh)
         by -= bh + g
         self.btn_theme.rect = pygame.Rect(x, by, half, bh)
-        self.btn_sound.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
+        self.btn_full.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
+        by -= bh + g
+        self.btn_sound.rect = pygame.Rect(x, by, half, bh)
+        self.btn_music.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
         by -= bh + g
         self.btn_undo.rect = pygame.Rect(x, by, half, bh)
         self.btn_hint.rect = pygame.Rect(x + half + g, by, w - half - g, bh)
@@ -1386,6 +1397,8 @@ class GameScreen:
                 self.app.cycle_theme()
             elif k == pygame.K_m:
                 self.app.toggle_sound()
+            elif k == pygame.K_b:
+                self.app.toggle_music()
             elif k in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self.app.go_menu()
 
@@ -1860,11 +1873,13 @@ class App:
         except Exception:
             pass
 
-        self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True, 'level': 'normal'}
+        self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True, 'music': True,
+                         'level': 'normal'}
         self.scores = {'player': 0, 'ai': 0, 'draw': 0}
         self.now = 0.0
         self.running = True
         self.sound = SoundFX(self)
+        self.music_ok = self._start_music()
         self.updater = updater.Updater(APP_VERSION)
         if not os.environ.get('CARO_NO_UPDATE'):
             self.updater.check_async()
@@ -1934,6 +1949,31 @@ class App:
         self._last_size = self.size
         if self.state == 'game':
             self.game.show_toast('Toàn màn hình: ' + ('Bật' if target else 'Tắt'))
+
+    def _start_music(self):
+        """Nhac nen (assets/music.wav, tu soan bang tools/make_music.py), lap vo han."""
+        try:
+            if not pygame.mixer.get_init():
+                return False
+            pygame.mixer.music.load(resource_path(os.path.join('assets', 'music.wav')))
+            pygame.mixer.music.set_volume(0.35)
+            pygame.mixer.music.play(-1, fade_ms=2500)
+            return True
+        except Exception:
+            return False
+
+    def toggle_music(self):
+        self.settings['music'] = not self.settings['music']
+        if self.music_ok:
+            try:
+                if self.settings['music']:
+                    pygame.mixer.music.unpause()
+                else:
+                    pygame.mixer.music.pause()
+            except Exception:
+                pass
+        if self.state == 'game':
+            self.game.show_toast('Nhạc nền: ' + ('Bật' if self.settings['music'] else 'Tắt'))
 
     def toggle_sound(self):
         self.settings['sound'] = not self.settings['sound']
