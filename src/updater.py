@@ -24,6 +24,23 @@ API_LATEST = f'https://api.github.com/repos/{REPO}/releases/latest'
 UA = {'User-Agent': 'TDCaro-Updater', 'Accept': 'application/vnd.github+json'}
 
 
+def _clean_env():
+    """Moi truong cho tien trinh con KHONG ke thua bien cua PyInstaller.
+
+    Neu ban exe moi nhan duoc _PYI_* cua ban cu, no tuong minh la tien trinh con
+    va di nap python3xx.dll tu thu muc _MEIxxxx cua ban cu (da bi xoa khi ban cu
+    thoat) -> loi "Failed to load Python DLL".
+    """
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith('_PYI_') and k not in ('_MEIPASS2', '_PYI_SPLASH_IPC')}
+    env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
+    for k in ('TCL_LIBRARY', 'TK_LIBRARY', 'SSL_CERT_FILE'):
+        v = env.get(k, '')
+        if getattr(sys, '_MEIPASS', None) and v.startswith(sys._MEIPASS):
+            env.pop(k)
+    return env
+
+
 def _ssl_ctx():
     try:
         import certifi
@@ -158,14 +175,14 @@ del "%~f0"
         with open(bat, 'w', encoding='mbcs' if os.name == 'nt' else 'utf-8') as f:
             f.write(script)
         flags = 0x08000000 | 0x00000008     # CREATE_NO_WINDOW | DETACHED_PROCESS
-        subprocess.Popen(['cmd', '/c', bat], creationflags=flags, close_fds=True)
+        subprocess.Popen(['cmd', '/c', bat], creationflags=flags, close_fds=True, env=_clean_env())
 
     def _install_macos(self, dmg, tmpdir):
         exe = os.path.abspath(sys.executable)
         app = os.path.abspath(os.path.join(os.path.dirname(exe), '..', '..'))
         q = shlex.quote
         if not app.endswith('.app'):
-            subprocess.Popen(['open', dmg])
+            subprocess.Popen(['open', dmg], env=_clean_env())
             return
         sh = os.path.join(tmpdir, 'update.sh')
         script = f'''#!/bin/sh
@@ -187,7 +204,7 @@ fi
 '''
         with open(sh, 'w') as f:
             f.write(script)
-        subprocess.Popen(['/bin/sh', sh], start_new_session=True, close_fds=True)
+        subprocess.Popen(['/bin/sh', sh], start_new_session=True, close_fds=True, env=_clean_env())
 
     # ------------------------------------------------------------ UI text
     def label(self):
