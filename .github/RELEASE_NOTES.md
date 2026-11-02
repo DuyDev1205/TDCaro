@@ -9,7 +9,9 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
-- **Mới:** nhạc nền lo-fi (tự soạn, không bản quyền) — bật/tắt bằng nút *Nhạc nền* hoặc phím `B`
+- **Mới:** bàn cờ tới 20×20 (thêm 19×19, 20×20; cuộn chuột để đổi kích thước)
+- **Mới:** nút *Đặt lại* tỉ số (phím `R`)
+- **Mới:** 3 bài nhạc nền lo-fi chill tự soạn (Mưa đêm, Cà phê sáng, Hoàng hôn) — `B` bật/tắt, `K` chuyển bài
 - **Sửa lỗi macOS:** chữ hiện thành thanh đặc, bóng đổ thành khối đen trên một số máy Mac
 - **Sửa lỗi:** "Failed to load Python DLL" khi game tự mở lại sau cập nhật
 - **Mới:** thanh tiêu đề và viền cửa sổ màu đen (Windows 10/11)

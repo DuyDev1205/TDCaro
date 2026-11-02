@@ -18,10 +18,11 @@
 ## Tính năng
 
 - **4 mức độ AI**: Dễ · Bình thường · Khó · Cực khó (xem chi tiết bên dưới)
-- Bàn cờ từ 5×5 đến 15×15, chọn người đi trước
+- Bàn cờ từ 5×5 đến **20×20** (chọn nhanh 9 · 13 · 15 · 19 · 20, hoặc `←/→` / cuộn chuột), chọn người đi trước
+- Tỉ số cả phiên, **đặt lại** bằng nút *Đặt lại* hoặc phím `R`
 - 4 giao diện: Midnight Neon, Gỗ Cổ Điển, Đại Dương, Hoa Anh Đào
 - Hiệu ứng đặt quân, đường thắng, pháo giấy; âm thanh
-- **Nhạc nền** lo-fi tự soạn bằng code (`tools/make_music.py`), bật/tắt bằng phím `B`
+- **Nhạc nền lo-fi**: 3 bài chill tự soạn bằng code — *Mưa đêm*, *Cà phê sáng*, *Hoàng hôn* (`tools/make_music.py`), phát ngẫu nhiên
 - **Đi lại** (Undo), **Gợi ý** nước đi, lịch sử nước đi, đồng hồ, tỉ số
 - **Toàn màn hình** (F11 / Alt+Enter hoặc nút trên màn hình)
 - AI chạy trên luồng riêng → giao diện không bị đơ
@@ -43,14 +44,16 @@
 | Phím | Chức năng |
 |---|---|
 | `Space` / `Enter` | Bắt đầu / ván mới |
-| `←` `→` | Đổi kích thước bàn (menu) |
+| `←` `→` / cuộn chuột | Đổi kích thước bàn 5–20 (menu) |
 | `D` | Đổi độ khó (menu) |
 | `F` | Đổi người đi trước (menu) |
 | `U` / `Ctrl+Z` | Đi lại |
 | `H` | Gợi ý |
 | `T` | Đổi giao diện |
 | `M` | Bật/tắt âm thanh |
+| `R` | Đặt lại tỉ số |
 | `B` | Bật/tắt nhạc nền |
+| `K` | Chuyển bài nhạc |
 | `F11` / `Alt+Enter` | Bật/tắt toàn màn hình |
 | `Esc` | Về menu / thoát toàn màn hình / thoát |
 
@@ -88,6 +91,8 @@ python -m venv .venv
 pip install -r requirements.txt
 python src/Finals.py
 ```
+
+Soạn lại nhạc nền (cần thêm `pip install numpy soundfile`, chỉ cho công cụ này): `python tools/make_music.py`
 
 ## Build
 

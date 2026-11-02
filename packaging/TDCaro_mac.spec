@@ -10,7 +10,7 @@ a = Analysis(
     pathex=[os.path.join(ROOT, 'src')],
     binaries=[],
     datas=[(os.path.join(ROOT, 'assets', 'icon.png'), 'assets'),
-           (os.path.join(ROOT, 'assets', 'music.wav'), 'assets')],
+           (os.path.join(ROOT, 'assets', 'music'), os.path.join('assets', 'music'))],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

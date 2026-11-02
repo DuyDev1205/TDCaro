@@ -247,6 +247,8 @@ APP_VERSION = '1.0.0'
 
 LEVELS = [('easy', 'Dễ'), ('normal', 'Bình thường'), ('hard', 'Khó'), ('expert', 'Cực khó')]
 LEVEL_NAMES = dict(LEVELS)
+MUSIC_END = pygame.USEREVENT + 7
+TRACK_TITLES = {'01_mua_dem': 'Mưa đêm', '02_ca_phe_sang': 'Cà phê sáng', '03_hoang_hon': 'Hoàng hôn'}
 
 
 def ai_move(board, col, level):
@@ -256,8 +258,8 @@ def ai_move(board, col, level):
     return ai_engine_v2.choose_move(board, col, level, base_score=stupid_score, base_moves=possible_moves)
 
 
-COL_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O']
-MIN_SIZE, MAX_SIZE = 5, 15
+COL_LETTERS = [chr(65 + i) for i in range(26)]
+MIN_SIZE, MAX_SIZE = 5, 20
 AI_MIN_THINK = 0.45          # giay - de nguoi choi kip thay AI "suy nghi"
 BASE_W, BASE_H = 1280, 800   # kich thuoc thiet ke goc, UI tu co gian theo cua so
 
@@ -890,7 +892,7 @@ class Confetti:
 # ================================ MENU SCREEN ===============================
 
 class MenuScreen:
-    PRESETS = [9, 11, 13, 15]
+    PRESETS = [9, 13, 15, 19, 20]
 
     def __init__(self, app):
         self.app = app
@@ -915,9 +917,13 @@ class MenuScreen:
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
         self.btn_full = Button(lambda: 'Thoát toàn màn hình' if app.fullscreen else 'Toàn màn hình',
                                app.toggle_fullscreen, font_size=13, radius=20)
-        self.btn_music = Button(lambda: 'Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt',
+        self.btn_music = Button(lambda: ('Nhạc: ' + (app.track_title or 'Bật')) if st['music'] else 'Nhạc nền: Tắt',
                                 app.toggle_music, font_size=13, radius=20)
-        self.buttons = ([self.btn_update, self.btn_full, self.btn_music, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
+        self.btn_reset = Button('Đặt lại', app.reset_scores, font_size=13, radius=18,
+                                enabled=lambda: any(app.scores.values()))
+        self.btn_next = Button('Bài tiếp', app.skip_track, font_size=13, radius=20,
+                               enabled=lambda: app.music_ok and len(app.tracks) > 1)
+        self.buttons = ([self.btn_update, self.btn_full, self.btn_next, self.btn_music, self.btn_reset, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
                          self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.swatches)
         self.size_pulse = 0.0
         self.want_hand = False
@@ -965,7 +971,8 @@ class MenuScreen:
         self.size_rect = pygame.Rect(ix + px(66), y, iw - 2 * px(66), px(54))
         y += px(54) + px(12)
         g = px(10)
-        cw = (iw - 3 * g) // 4
+        nc = len(self.chips)
+        cw = (iw - (nc - 1) * g) // nc
         for i, b in enumerate(self.chips):
             b.rect = pygame.Rect(ix + i * (cw + g), y, cw, px(36))
         y += px(36) + sec
@@ -1016,6 +1023,9 @@ class MenuScreen:
         for b in self.buttons:
             if b.handle(ev, self.app):
                 return
+        if ev.type == pygame.MOUSEWHEEL and self.size_rect.collidepoint(pygame.mouse.get_pos()):
+            self.change_size(1 if ev.y > 0 else -1)
+            return
         if ev.type == pygame.KEYDOWN:
             k = ev.key
             if k in (pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
@@ -1034,19 +1044,39 @@ class MenuScreen:
                 self.app.toggle_sound()
             elif k == pygame.K_b:
                 self.app.toggle_music()
+            elif k == pygame.K_r:
+                self.app.reset_scores()
             elif k == pygame.K_ESCAPE and self.app.fullscreen:
                 self.app.toggle_fullscreen()
             elif k in (pygame.K_ESCAPE, pygame.K_q):
                 self.app.quit()
 
+    def score_pill(self, th):
+        sc = self.app.scores
+        lab = spaced_text_surf('TỈ SỐ', px(11), th['text_dim'], 'bold', px(2))
+        t1 = text_surf('Bạn', px(15), th['text'], 'semibold')
+        n1 = text_surf(str(sc['player']), px(20), th['x'], 'black')
+        dash = text_surf('–', px(18), th['text_dim'], 'semibold')
+        n2 = text_surf(str(sc['ai']), px(20), th['o'], 'black')
+        t2 = text_surf('AI', px(15), th['text'], 'semibold')
+        parts = [lab, t1, n1, dash, n2, t2]
+        gaps = [px(16), px(8), px(10), px(10), px(8)]
+        pw = sum(p.get_width() for p in parts) + sum(gaps) + px(40)
+        return parts, gaps, pygame.Rect(self.lx, self.score_y, pw, px(48))
+
     def update(self, dt):
         mouse = pygame.mouse.get_pos()
+        pr = self.score_pill(self.app.th)[2]
+        rw = text_surf('Đặt lại', px(13), (0, 0, 0), 'semibold').get_width() + px(36)
+        self.btn_reset.rect = pygame.Rect(pr.right + px(12), pr.centery - px(18), rw, px(36))
         up = self.app.updater
         W = self.app.size[0]
         fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
         self.btn_full.rect = pygame.Rect(W - px(24) - fw, px(20), fw, px(40))
+        nw = text_surf(self.btn_next.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        self.btn_next.rect = pygame.Rect(self.btn_full.rect.x - px(12) - nw, px(20), nw, px(40))
         mw = text_surf(self.btn_music.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
-        self.btn_music.rect = pygame.Rect(self.btn_full.rect.x - px(12) - mw, px(20), mw, px(40))
+        self.btn_music.rect = pygame.Rect(self.btn_next.rect.x - px(8) - mw, px(20), mw, px(40))
         if up.visible():
             tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
             self.btn_update.rect = pygame.Rect(self.btn_music.rect.x - px(12) - tw - px(40), px(20), tw + px(40), px(40))
@@ -1080,23 +1110,14 @@ class MenuScreen:
                   px(16), th['bg_text_dim'], (x, self.desc_y + px(24)))
 
         # score pill
-        sc = app.scores
-        lab = spaced_text_surf('TỈ SỐ', px(11), th['text_dim'], 'bold', px(2))
-        t1 = text_surf('Bạn', px(15), th['text'], 'semibold')
-        n1 = text_surf(str(sc['player']), px(20), th['x'], 'black')
-        dash = text_surf('–', px(18), th['text_dim'], 'semibold')
-        n2 = text_surf(str(sc['ai']), px(20), th['o'], 'black')
-        t2 = text_surf('AI', px(15), th['text'], 'semibold')
-        parts = [lab, t1, n1, dash, n2, t2]
-        gaps = [px(16), px(8), px(10), px(10), px(8)]
-        pw = sum(p.get_width() for p in parts) + sum(gaps) + px(40)
-        pr = pygame.Rect(x, self.score_y, pw, px(48))
+        parts, gaps, pr = self.score_pill(th)
         draw_card(surf, pr, px(24), th['panel'], th['border'], 1, (px(16), th['shadow_alpha'] // 2, px(5)))
         cx = pr.x + px(20)
         for i, p in enumerate(parts):
             surf.blit(p, p.get_rect(midleft=(cx, pr.centery)))
             cx += p.get_width() + (gaps[i] if i < len(gaps) else 0)
 
+        self.btn_reset.draw(surf, th)
         for b in (self.btn_start, self.btn_quit, self.btn_sound):
             b.draw(surf, th)
 
@@ -1116,11 +1137,12 @@ class MenuScreen:
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu   ·   ←/→: kích thước   ·   D: độ khó   ·   F: người đi trước   ·   T: giao diện   ·   M: âm thanh   ·   B: nhạc nền   ·   F11: toàn màn hình   ·   Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu  ·  ←/→: kích thước  ·  D: độ khó  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
         self.btn_full.draw(surf, th)
         self.btn_music.draw(surf, th)
+        self.btn_next.draw(surf, th)
         if app.updater.visible():
             self.btn_update.draw(surf, th)
 
@@ -1399,6 +1421,8 @@ class GameScreen:
                 self.app.toggle_sound()
             elif k == pygame.K_b:
                 self.app.toggle_music()
+            elif k == pygame.K_r:
+                self.app.reset_scores()
             elif k in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 self.app.go_menu()
 
@@ -1951,16 +1975,48 @@ class App:
             self.game.show_toast('Toàn màn hình: ' + ('Bật' if target else 'Tắt'))
 
     def _start_music(self):
-        """Nhac nen (assets/music.wav, tu soan bang tools/make_music.py), lap vo han."""
+        """Danh sach nhac nen lo-fi (assets/music/*.ogg, tu soan bang tools/make_music.py).
+        Phat ngau nhien, het bai tu chuyen bai."""
+        self.track_idx = -1
+        self.tracks = []
         try:
             if not pygame.mixer.get_init():
                 return False
-            pygame.mixer.music.load(resource_path(os.path.join('assets', 'music.wav')))
-            pygame.mixer.music.set_volume(0.35)
-            pygame.mixer.music.play(-1, fade_ms=2500)
+            folder = resource_path(os.path.join('assets', 'music'))
+            self.tracks = sorted(os.path.join(folder, f) for f in os.listdir(folder) if f.endswith('.ogg'))
+            if not self.tracks:
+                return False
+            random.shuffle(self.tracks)
+            pygame.mixer.music.set_endevent(MUSIC_END)
+            return self.next_track(fade_ms=2500)
+        except Exception:
+            return False
+
+    @property
+    def track_title(self):
+        if not self.tracks or self.track_idx < 0:
+            return ''
+        key = os.path.splitext(os.path.basename(self.tracks[self.track_idx]))[0]
+        return TRACK_TITLES.get(key, key)
+
+    def next_track(self, fade_ms=1200):
+        if not self.tracks:
+            return False
+        try:
+            self.track_idx = (self.track_idx + 1) % len(self.tracks)
+            pygame.mixer.music.load(self.tracks[self.track_idx])
+            pygame.mixer.music.set_volume(0.5)
+            pygame.mixer.music.play(0, fade_ms=fade_ms)
+            self._track_t0 = time.time()
+            if not self.settings['music']:
+                pygame.mixer.music.pause()
             return True
         except Exception:
             return False
+
+    def skip_track(self):
+        if self.music_ok and self.next_track() and self.state == 'game':
+            self.game.show_toast('Đang phát: ' + self.track_title)
 
     def toggle_music(self):
         self.settings['music'] = not self.settings['music']
@@ -1973,7 +2029,15 @@ class App:
             except Exception:
                 pass
         if self.state == 'game':
-            self.game.show_toast('Nhạc nền: ' + ('Bật' if self.settings['music'] else 'Tắt'))
+            on = self.settings['music']
+            self.game.show_toast('Nhạc nền: Bật · ' + self.track_title if on and self.music_ok else
+                                 'Nhạc nền: ' + ('Bật' if on else 'Tắt'))
+
+    def reset_scores(self):
+        for k in self.scores:
+            self.scores[k] = 0
+        if self.state == 'game':
+            self.game.show_toast('Đã đặt lại tỉ số')
 
     def toggle_sound(self):
         self.settings['sound'] = not self.settings['sound']
@@ -2002,6 +2066,12 @@ class App:
                 if pygame.display.get_surface().get_size() != getattr(self, '_last_size', None):
                     self._last_size = pygame.display.get_surface().get_size()
                     self.on_resize()
+            elif ev.type == MUSIC_END:
+                # load() bai moi cung ban ra MUSIC_END cua bai cu -> bo qua neu bai vua bat dau
+                if time.time() - getattr(self, '_track_t0', 0) > 1.0:
+                    self.next_track()
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_k:
+                self.skip_track()
             elif ev.type == pygame.KEYDOWN and (ev.key == pygame.K_F11 or (
                     ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and ev.mod & pygame.KMOD_ALT)):
                 self.toggle_fullscreen()
