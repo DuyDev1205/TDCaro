@@ -538,7 +538,7 @@ def background(w, h, th):
     key = ('bg', w, h, th['key'])
 
     def make():
-        s = gradient(w, h, th['bg_top'], th['bg_bottom']).convert()
+        s = gradient(w, h, th['bg_top'], th['bg_bottom'])   # giu dinh dang XRGB (khong convert theo man hinh)
         sw, sh = max(8, w // 8), max(8, h // 8)
         a = th['blob_alpha']
         for col, (fx, fy), fr in ((th['blob1'], (0.12, 0.18), 0.75), (th['blob2'], (0.95, 0.95), 0.8)):
@@ -1892,6 +1892,10 @@ class App:
     def on_resize(self):
         self.screen = pygame.display.get_surface()
         W, H = self.size
+        # Ve moi thu len 1 canvas DUC (XRGB, khong kenh alpha) roi moi dua ra man hinh.
+        # macOS: man hinh co kenh alpha -> blit trong suot len nen bi chep nguyen mau
+        # (chu thanh thanh dac, bong do thanh khoi den). Canvas rieng giup moi nen tang giong nhau.
+        self.canvas = pygame.Surface((W, H), 0, 32)
         UI.s = clamp(min(W / BASE_W, H / BASE_H), 0.6, 3.0)
         clear_gfx()
         self.floats.reset(W, H)
@@ -1968,7 +1972,8 @@ class App:
         scr = self.current
         self.floats.update(dt)
         scr.update(dt)
-        scr.draw(self.screen)
+        scr.draw(self.canvas)
+        self.screen.blit(self.canvas, (0, 0))
         want = scr.want_hand
         if want != self.cursor_hand:
             self.cursor_hand = want
