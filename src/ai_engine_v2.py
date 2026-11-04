@@ -12,8 +12,10 @@ File nay bo sung 3 muc:
   expert  (Cuc kho)    : nhu hard nhung tim VCF sau hon, beam rong hon, alpha-beta dao sau dan
                          (iterative deepening) toi 12 nuoc + bang chuyen vi Zobrist, ~2.2 giay/nuoc.
 
-API:  choose_move(grid, col, level, base_score=None, base_moves=None) -> (row, col)
+API:  choose_move(grid, col, level, base_score=None, base_moves=None, block=False) -> (row, col)
       grid: list[list[str]] voi ' ', 'r', 'w'  (giong ban co cua Finals.py)
+      block=True: luat "chan hai dau" - day 5 (hoac dai hon) bi quan doi thu chan CA HAI DAU
+                  thi khong thang (bien ban co khong tinh la chan).
 """
 import random
 import time
@@ -74,6 +76,54 @@ def _classify_key(key):
         s = key.decode()
         t = _classify(s[:5] + 'x' + s[6:])
         _fast_cache[key] = t
+    return t
+
+
+# ---------------- Luat CHAN HAI DAU --------------------------------------
+# Y tuong: 1 "cua so 5 o" chi con song neu (khong co quan doi thu / bien trong do) va khi lap day
+# thanh day x, hai dau day KHONG dong thoi la quan doi thu. O nao khong thuoc cua so song nao thi
+# khong bao gio gop vao 1 day 5 hop le -> coi nhu bi chan ('o'). Sau khi "che" nhu vay, dung lai
+# nguyen bo mau hinh cua luat tu do -> moi danh gia / tim kiem tu dong theo luat chan hai dau.
+#   'o' = quan doi thu (chan),  '#' = bien ban co (KHONG tinh la chan dau)
+_BT_BLOCK = {1: bytes.maketrans(b'\x00\x01\x02\x03', b'_xo#'), 2: bytes.maketrans(b'\x00\x01\x02\x03', b'_ox#')}
+_MAPS_BLOCK = {1: ('_', 'x', 'o', '#'), 2: ('_', 'o', 'x', '#')}
+_mask_cache = {}
+
+
+def _mask(s):
+    m = _mask_cache.get(s)
+    if m is not None:
+        return m
+    n = len(s)
+    keep = [False] * n
+    for a in range(n - 4):
+        w = s[a:a + 5]
+        if 'o' in w or '#' in w:
+            continue
+        lft = a - 1
+        while lft >= 0 and s[lft] == 'x':
+            lft -= 1
+        rgt = a + 5
+        while rgt < n and s[rgt] == 'x':
+            rgt += 1
+        if lft >= 0 and rgt < n and s[lft] == 'o' and s[rgt] == 'o':
+            continue                       # lap day cung bi chan 2 dau -> cua so chet
+        for k in range(a, a + 5):
+            keep[k] = True
+    m = ''.join(ch if (keep[i] or ch == 'o' or ch == '#') else 'o' for i, ch in enumerate(s))
+    _mask_cache[s] = m
+    return m
+
+
+_fast_cache_block = {}
+
+
+def _classify_key_block(key):
+    t = _fast_cache_block.get(key)
+    if t is None:
+        s = key.decode()
+        t = _classify(_mask(s[:5] + 'x' + s[6:]))
+        _fast_cache_block[key] = t
     return t
 
 
@@ -143,6 +193,32 @@ def _line_eval(key):
     return v
 
 
+_line_cache_block = {}
+
+
+def _line_eval_block(key):
+    v = _line_cache_block.get(key)
+    if v is not None:
+        return v
+    res = []
+    for p in (1, 2):
+        s = _mask('#' + key.translate(_TRANS[p]) + '#')
+        if 'xxxxx' in s:
+            res.append((10 ** 7, 9, 0))
+            continue
+        sc = f = t = 0
+        for pat, w, ff, tt in _LINE_PATS:
+            n = s.count(pat)
+            if n:
+                sc += w * n
+                f += ff * n
+                t += tt * n
+        res.append((sc, f, t))
+    v = (res[0], res[1])
+    _line_cache_block[key] = v
+    return v
+
+
 class _Timeout(Exception):
     pass
 
@@ -151,7 +227,13 @@ class _Timeout(Exception):
 # ENGINE
 # --------------------------------------------------------------------------
 class Engine:
-    def __init__(self, grid, me):
+    def __init__(self, grid, me, block=False):
+        self.block = block
+        self._bt = _BT_BLOCK if block else _BT
+        self._maps = _MAPS_BLOCK if block else _MAPS
+        self._fc = _fast_cache_block if block else _fast_cache
+        self._ck = _classify_key_block if block else _classify_key
+        self._le = _line_eval_block if block else _line_eval
         n = len(grid)
         W = n + 2 * PAD
         self.n, self.W, self.me = n, W, me
@@ -220,7 +302,7 @@ class Engine:
     def _update_line(self, lid):
         c = self.cells
         key = ''.join([_CH[c[j]] for j in self.line_cells[lid]])
-        new = _line_eval(key)
+        new = self._le(key)
         old = self.line_val[lid]
         S, F, T = self.S, self.F, self.T
         if old is not None:
@@ -257,20 +339,22 @@ class Engine:
     # ---------------- mau hinh
     def types_at(self, i, p):
         c = self.cells
-        bt = _BT[p]
-        fc = _fast_cache
+        bt = self._bt[p]
+        fc = self._fc
+        ck = self._ck
         out = []
         for offs in self.dir_offs:
             key = bytes([c[i + o] for o in offs]).translate(bt)
             t = fc.get(key)
-            out.append(t if t is not None else _classify_key(key))
+            out.append(t if t is not None else ck(key))
         return out
 
     def types_both(self, i):
         """Mau hinh tai o i cho ca 2 phe (doc ban co 1 lan)."""
         c = self.cells
-        b1, b2 = _BT[1], _BT[2]
-        fc = _fast_cache
+        b1, b2 = self._bt[1], self._bt[2]
+        fc = self._fc
+        _classify_key = self._ck
         t1, t2 = [], []
         for offs in self.dir_offs:
             raw = bytes([c[i + o] for o in offs])
@@ -284,11 +368,26 @@ class Engine:
 
     def type_dir(self, i, p, d):
         c = self.cells
-        m = _MAPS[p]
+        m = self._maps[p]
         c[i] = p
-        t = _classify(''.join([m[c[i + k * d]] for k in _OFFS]))
+        s = ''.join([m[c[i + k * d]] for k in _OFFS])
+        t = _classify(_mask(s) if self.block else s)
         c[i] = 0
         return t
+
+    def _alive(self, base, d, p):
+        """Luat chan hai dau: cua so 5 o tu base (huong d) neu lap day bang p co hop le khong."""
+        if not self.block:
+            return True
+        c = self.cells
+        o = 3 - p
+        lft = base - d
+        while c[lft] == p:
+            lft -= d
+        rgt = base + 5 * d
+        while c[rgt] == p:
+            rgt += d
+        return not (c[lft] == o and c[rgt] == o)
 
     def candidates(self):
         c = self.cells
@@ -337,7 +436,7 @@ class Engine:
                         else:
                             ok = False
                             break
-                    if not ok:
+                    if not ok or (cnt >= 3 and not self._alive(base, d, p)):
                         continue
                     if cnt == 4:
                         fives.update(emp)
@@ -367,7 +466,7 @@ class Engine:
                     else:
                         ok = False
                         break
-                if ok and cnt == 4 and emp is not None:
+                if ok and cnt == 4 and emp is not None and self._alive(base, d, p):
                     out.add(emp)
         return out
 
@@ -679,9 +778,9 @@ def _tactical(eng, p):
     return None, scored, opp_open
 
 
-def _normal(grid, col, base_score, base_moves):
+def _normal(grid, col, base_score, base_moves, block=False):
     me = 1 if col == 'w' else 2
-    eng = Engine(grid, me)
+    eng = Engine(grid, me, block)
     op = _opening(eng)
     if op:
         return op
@@ -718,10 +817,10 @@ def _normal(grid, col, base_score, base_moves):
     return ranked[0][2]
 
 
-def _search_level(grid, col, level):
+def _search_level(grid, col, level, block=False):
     me = 1 if col == 'w' else 2
     op_ = 3 - me
-    eng = Engine(grid, me)
+    eng = Engine(grid, me, block)
     op = _opening(eng)
     if op:
         return op
@@ -805,8 +904,8 @@ LEVEL_CFG = {
 }
 
 
-def choose_move(grid, col, level, base_score=None, base_moves=None):
-    """Tra ve (row, col) cho phe `col` ('w' hoac 'r')."""
+def choose_move(grid, col, level, base_score=None, base_moves=None, block=False):
+    """Tra ve (row, col) cho phe `col` ('w' hoac 'r'). block=True: luat chan hai dau."""
     if level == 'normal':
-        return _normal(grid, col, base_score, base_moves)
-    return _search_level(grid, col, level)
+        return _normal(grid, col, base_score, base_moves, block)
+    return _search_level(grid, col, level, block)

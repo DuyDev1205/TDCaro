@@ -17,6 +17,7 @@
 
 ## Tính năng
 
+- **Luật chơi**: *Chặn 2 đầu* (mặc định — dãy 5 bị quân đối thủ chặn cả hai đầu không thắng, mép bàn không tính là chặn) hoặc *Tự do*; AI mức Bình thường/Khó/Cực khó hiểu luật này
 - **4 mức độ AI**: Dễ · Bình thường · Khó · Cực khó (xem chi tiết bên dưới)
 - Bàn cờ từ 5×5 đến **20×20** (chọn nhanh 9 · 13 · 15 · 19 · 20, hoặc `←/→` / cuộn chuột), chọn người đi trước
 - Tỉ số cả phiên, **đặt lại** bằng nút *Đặt lại* hoặc phím `R`
@@ -46,6 +47,7 @@
 | `Space` / `Enter` | Bắt đầu / ván mới |
 | `←` `→` / cuộn chuột | Đổi kích thước bàn 5–20 (menu) |
 | `D` | Đổi độ khó (menu) |
+| `L` | Đổi luật: chặn 2 đầu / tự do (menu) |
 | `F` | Đổi người đi trước (menu) |
 | `U` / `Ctrl+Z` | Đi lại |
 | `H` | Gợi ý |

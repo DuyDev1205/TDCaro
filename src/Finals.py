@@ -251,11 +251,38 @@ MUSIC_END = pygame.USEREVENT + 7
 TRACK_TITLES = {'01_mua_dem': 'Mưa đêm', '02_ca_phe_sang': 'Cà phê sáng', '03_hoang_hon': 'Hoàng hôn'}
 
 
-def ai_move(board, col, level):
+RULES = [('free', 'Tự do'), ('block', 'Chặn 2 đầu')]
+
+
+def rule_win_cells(board, r, c, block):
+    """Kiem tra thang qua nuoc vua danh (r, c). Tra ve danh sach o (row, col) cua day thang, hoac None.
+    block=True: day >= 5 bi quan doi thu chan CA HAI DAU thi khong thang (bien khong tinh la chan)."""
+    col = board[r][c]
+    if col == ' ':
+        return None
+    n = len(board)
+    opp = 'w' if col == 'r' else 'r'
+    for dr, dc in ((0, 1), (1, 0), (1, 1), (1, -1)):
+        cells = [(r, c)]
+        ends = []
+        for sgn in (1, -1):
+            rr, cc = r + dr * sgn, c + dc * sgn
+            while 0 <= rr < n and 0 <= cc < n and board[rr][cc] == col:
+                cells.append((rr, cc))
+                rr += dr * sgn
+                cc += dc * sgn
+            ends.append(0 <= rr < n and 0 <= cc < n and board[rr][cc] == opp)
+        if len(cells) >= 5 and not (block and ends[0] and ends[1]):
+            return sorted(cells)
+    return None
+
+
+def ai_move(board, col, level, block=False):
     """Chon nuoc theo do kho. 'easy' = AI GOC (best_move) giu nguyen."""
     if level == 'easy':
         return best_move(board, col)
-    return ai_engine_v2.choose_move(board, col, level, base_score=stupid_score, base_moves=possible_moves)
+    return ai_engine_v2.choose_move(board, col, level, base_score=stupid_score, base_moves=possible_moves,
+                                    block=block)
 
 
 COL_LETTERS = [chr(65 + i) for i in range(26)]
@@ -912,6 +939,8 @@ class MenuScreen:
                                   selected=lambda: st['first'] == 'ai', icon=lambda th: ('o', px(18)))
         self.level_chips = [Button(name, (lambda k=k: self.set_level(k)), style='chip', font_size=13,
                                    selected=(lambda k=k: st['level'] == k)) for k, name in LEVELS]
+        self.rule_chips = [Button(name, (lambda k=k: self.set_rule(k)), style='chip', font_size=13,
+                                  selected=(lambda k=k: st['rule'] == k)) for k, name in RULES]
         self.swatches = [ThemeSwatch(k, app) for k in THEME_KEYS]
         self.btn_update = Button(lambda: app.updater.label(), app.updater.start, 'primary', font_size=13,
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
@@ -924,7 +953,8 @@ class MenuScreen:
         self.btn_next = Button('Bài tiếp', app.skip_track, font_size=13, radius=20,
                                enabled=lambda: app.music_ok and len(app.tracks) > 1)
         self.buttons = ([self.btn_update, self.btn_full, self.btn_next, self.btn_music, self.btn_reset, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
-                         self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.swatches)
+                         self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.rule_chips +
+                        self.swatches)
         self.size_pulse = 0.0
         self.want_hand = False
 
@@ -943,6 +973,12 @@ class MenuScreen:
     def set_level(self, k):
         self.app.settings['level'] = k
 
+    def set_rule(self, k):
+        self.app.settings['rule'] = k
+
+    def toggle_rule(self):
+        self.set_rule('free' if self.app.settings['rule'] == 'block' else 'block')
+
     def cycle_level(self):
         keys = [k for k, _ in LEVELS]
         i = keys.index(self.app.settings['level'])
@@ -957,10 +993,11 @@ class MenuScreen:
         self.lx, self.colL = lx, colL
 
         # right card
-        pad, lbl_h, sec = px(26), px(20), px(22)
+        pad, lbl_h, sec = px(26), px(20), px(18)
         card_h = (pad + lbl_h + px(10) + px(54) + px(12) + px(36) + sec +
                   lbl_h + px(10) + px(40) + sec +
-                  lbl_h + px(10) + px(46) + sec + lbl_h + px(10) + px(96) + pad)
+                  lbl_h + px(10) + px(46) + sec + lbl_h + px(10) + px(38) + px(10) + px(44) + sec +
+                  lbl_h + px(10) + px(90) + pad)
         self.card = pygame.Rect(rx, (H - card_h) // 2 - px(12), colR, card_h)
         ix, iw = self.card.x + pad, self.card.w - 2 * pad
         y = self.card.y + pad
@@ -989,12 +1026,20 @@ class MenuScreen:
         self.btn_first_p.rect = pygame.Rect(ix, y, hw, px(46))
         self.btn_first_a.rect = pygame.Rect(ix + hw + g, y, iw - hw - g, px(46))
         y += px(46) + sec
+        self.lbl_rule = (ix, y)
+        y += lbl_h + px(10)
+        rw = (iw - g) // 2
+        for i, b in enumerate(self.rule_chips):
+            b.rect = pygame.Rect(ix + i * (rw + g), y, rw if i == 0 else iw - rw - g, px(38))
+        y += px(38) + px(10)
+        self.rule_info = pygame.Rect(ix, y, iw, px(44))      # o minh hoa luat
+        y += px(44) + sec
         self.lbl_theme = (ix, y)
         y += lbl_h + px(10)
         g2 = px(12)
         sw = (iw - 3 * g2) // 4
         for i, s in enumerate(self.swatches):
-            s.rect = pygame.Rect(ix + i * (sw + g2), y, sw, px(96))
+            s.rect = pygame.Rect(ix + i * (sw + g2), y, sw, px(90))
 
         # left column
         self.title_s = gradient_text('TDCaro', px(108), 'black', self.app.th['x'], self.app.th['o'])
@@ -1038,6 +1083,8 @@ class MenuScreen:
                 self.app.cycle_theme()
             elif k == pygame.K_f:
                 self.set_first('ai' if self.app.settings['first'] == 'player' else 'player')
+            elif k == pygame.K_l:
+                self.toggle_rule()
             elif k == pygame.K_d:
                 self.cycle_level()
             elif k == pygame.K_m:
@@ -1050,6 +1097,34 @@ class MenuScreen:
                 self.app.toggle_fullscreen()
             elif k in (pygame.K_ESCAPE, pygame.K_q):
                 self.app.quit()
+
+    def draw_rule_info(self, surf, th, block):
+        """O minh hoa luat: so do quan co + cau giai thich."""
+        r = self.rule_info
+        accent = th['x'] if block else th['o']
+        bg = lerp_color(th['panel_alt'], accent, 0.07)
+        surf.blit(round_rect_surf(r.w, r.h, px(12), bg, lerp_color(th['border'], accent, 0.35), 1), r.topleft)
+        # so do: cac quan co tren 1 "rang" nho
+        ps, step = px(22), px(23)
+        seq = 'oxxxxxo' if block else 'xxxxx'
+        x0, cy = r.x + px(12), r.centery
+        for i, k in enumerate(seq):
+            blit_center(surf, themed_piece(k, ps, th, effects=False), (x0 + i * step + step // 2, cy))
+        dw = len(seq) * step
+        if block:
+            # gach ngang qua day X bi chan 2 dau -> "khong tinh"
+            xa, xb = x0 + step + px(2), x0 + 6 * step - px(2)
+            pygame.draw.line(surf, th['text'], (xa, cy), (xb, cy), max(2, px(2)))
+        # nhan ket qua (ben phai)
+        label = 'KHÔNG THẮNG' if block else 'THẮNG'
+        ls = spaced_text_surf(label, px(11), accent, 'bold', px(1))
+        bw, bh = ls.get_width() + px(20), px(24)
+        br = pygame.Rect(r.right - px(10) - bw, cy - bh // 2, bw, bh)
+        surf.blit(round_rect_surf(bw, bh, bh // 2, lerp_color(th['panel_alt'], accent, 0.22)), br.topleft)
+        surf.blit(ls, ls.get_rect(center=br.center))
+        # mo ta
+        title = 'Bị chặn hai đầu' if block else '5 quân liên tiếp'
+        draw_text(surf, title, px(14), th['text'], (x0 + dw + px(12), cy), 'semibold', 'midleft')
 
     def score_pill(self, th):
         sc = self.app.scores
@@ -1131,13 +1206,15 @@ class MenuScreen:
         draw_text(surf, f'{n} × {n}', fs, th['accent'], sr.center, 'black', 'center')
         draw_spaced(surf, 'ĐỘ KHÓ', px(12), th['text_dim'], self.lbl_level, 'bold')
         draw_spaced(surf, 'NGƯỜI ĐI TRƯỚC', px(12), th['text_dim'], self.lbl_first, 'bold')
+        draw_spaced(surf, 'LUẬT CHƠI', px(12), th['text_dim'], self.lbl_rule, 'bold')
+        self.draw_rule_info(surf, th, app.settings['rule'] == 'block')
         draw_spaced(surf, 'GIAO DIỆN', px(12), th['text_dim'], self.lbl_theme, 'bold')
         for b in ([self.btn_minus, self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips +
-                  self.level_chips + self.swatches):
+                  self.level_chips + self.rule_chips + self.swatches):
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu  ·  ←/→: kích thước  ·  D: độ khó  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu  ·  ←/→: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
         self.btn_full.draw(surf, th)
@@ -1179,6 +1256,8 @@ class GameScreen:
     def reset_state(self):
         self.N = self.app.settings['size']
         self.level = self.app.settings.get('level', 'normal')
+        self.block = self.app.settings.get('rule', 'block') == 'block'
+        self.rule_line = None
         self.board = make_empty_board(self.N)
         self.moves = []                 # (col, row, who)  who in {'player','ai'}
         self.anim = {}
@@ -1218,11 +1297,12 @@ class GameScreen:
 
     def _run_job(self, color, level):
         board_copy = [row[:] for row in self.board]
+        block = self.block
         job = {'token': self.token, 'done': False, 'result': None, 't0': time.perf_counter()}
 
         def work():
             try:
-                job['result'] = ai_move(board_copy, color, level)   # 'easy' = AI ENGINE GOC
+                job['result'] = ai_move(board_copy, color, level, block)   # 'easy' = AI ENGINE GOC
             except Exception:
                 try:
                     job['result'] = best_move(board_copy, color)
@@ -1254,7 +1334,12 @@ class GameScreen:
         self.anim[(c, r)] = self.app.now
         self.hint = None
         self.app.sound.play('place' if who == 'player' else 'ai')
-        res = is_win(self.board)                                   # AI ENGINE GOC
+        if self.block:
+            # luat chan hai dau: kiem tra day thang qua nuoc vua danh
+            self.rule_line = rule_win_cells(self.board, r, c, True)
+            res = ('Player Win' if who == 'player' else 'NPC Win') if self.rule_line else 'Continue playing'
+        else:
+            res = is_win(self.board)                               # AI ENGINE GOC (luat tu do)
         if res == 'Continue playing' and all(cell != ' ' for row in self.board for cell in row):
             res = 'Draw'          # ban co da kin -> hoa
         if res != 'Continue playing':
@@ -1284,7 +1369,9 @@ class GameScreen:
             self.app.scores['draw'] += 1
             self.app.sound.play('draw')
         self.win_cells = []
-        if col:
+        if col and self.block and self.rule_line:
+            self.win_cells = [(cc, rr) for rr, cc in self.rule_line]
+        elif col:
             line = find_winning_line(self.board, col)              # AI ENGINE GOC
             if line:
                 sy, sx, ey, ex = line
@@ -1649,7 +1736,7 @@ class GameScreen:
         blit_center(surf, themed_piece('o', px(26), th, False), (r.x + px(37), r.centery))
         tx = r.x + px(58)
         draw_text(surf, 'TDCaro', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
-        draw_text(surf, 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
+        draw_text(surf, 'Luật chặn 2 đầu' if self.block else 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
         ts = text_surf(f'{self.N}×{self.N} · {LEVEL_NAMES[self.level]}', px(12), th['text'], 'bold')
         pr = pygame.Rect(0, 0, ts.get_width() + px(20), px(28))
         pr.midright = r.midright
@@ -1898,7 +1985,7 @@ class App:
             pass
 
         self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True, 'music': True,
-                         'level': 'normal'}
+                         'level': 'normal', 'rule': 'block'}
         self.scores = {'player': 0, 'ai': 0, 'draw': 0}
         self.now = 0.0
         self.running = True
