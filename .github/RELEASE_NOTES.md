@@ -9,6 +9,8 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Mới:** tự tạo shortcut *TDCaro* trên Desktop và Start Menu (Windows) — lần đầu mở và sau mỗi lần cập nhật
+- **Sửa lỗi:** cập nhật trên Windows không còn bật cửa sổ Command Prompt nhấp nháy (thay file tức thì, không cần script)
 - **Mới:** luật **chặn 2 đầu** (mặc định): dãy 5 bị chặn cả hai đầu không thắng — chọn *Tự do* / *Chặn 2 đầu* ở menu (phím `L`); AI hiểu luật mới
 - **Mới:** bàn cờ tới 20×20 (thêm 19×19, 20×20; cuộn chuột để đổi kích thước)
 - **Mới:** nút *Đặt lại* tỉ số (phím `R`)

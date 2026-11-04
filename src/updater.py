@@ -2,7 +2,8 @@
 """
 Tu dong cap nhat qua GitHub Releases.
  - Khi mo game: kiem tra release moi nhat (chay nen, khong lam cham game).
- - Windows (.exe): tai ban moi -> dong game -> thay file -> mo lai.
+ - Windows (.exe): tai ban moi -> doi ten exe dang chay thanh .old -> dat ban moi vao -> mo lai
+   (khong can script/console; .old tu xoa o lan mo sau).
  - macOS (.app): tai .dmg -> dong game -> thay app -> mo lai (that bai thi mo .dmg).
  - Chay tu ma nguon: mo trang release tren trinh duyet.
 """
@@ -11,9 +12,11 @@ import re
 import sys
 import json
 import shlex
+import shutil
 import ssl
 import tempfile
 import threading
+import time
 import subprocess
 import platform
 import urllib.request
@@ -70,8 +73,29 @@ def _asset_matches(name):
     return False
 
 
+def cleanup_old_exe():
+    """Xoa TDCaro.exe.old con lai sau lan cap nhat truoc (ban cu co the dang thoat -> thu lai vai lan)."""
+    if sys.platform != 'win32' or not _is_frozen():
+        return
+    old = os.path.abspath(sys.executable) + '.old'
+    if not os.path.exists(old):
+        return
+
+    def work():
+        for _ in range(40):
+            try:
+                os.remove(old)
+                return
+            except FileNotFoundError:
+                return
+            except OSError:
+                time.sleep(0.5)
+    threading.Thread(target=work, daemon=True).start()
+
+
 class Updater:
     def __init__(self, current_version):
+        cleanup_old_exe()
         self.current = current_version
         self.state = 'idle'        # idle|checking|uptodate|available|downloading|installing|error
         self.latest = None
@@ -153,6 +177,34 @@ class Updater:
             self.state = 'error'
 
     def _install_windows(self, new_exe, tmpdir):
+        """Thay exe KHONG can script/console: Windows cho phep DOI TEN file exe dang chay
+        (chi khong cho xoa). exe -> exe.old, ban moi -> exe, mo ban moi roi thoat.
+        File .old duoc xoa o lan mo sau (cleanup_old_exe)."""
+        exe = os.path.abspath(sys.executable)
+        old, staged = exe + '.old', exe + '.new'
+        try:
+            for f in (old, staged):
+                if os.path.exists(f):
+                    os.remove(f)
+            shutil.move(new_exe, staged)          # dua ve cung o dia voi exe -> doi ten tuc thi
+            os.replace(exe, old)
+            try:
+                os.replace(staged, exe)
+            except OSError:
+                os.replace(old, exe)              # hoan tac
+                raise
+        except OSError:
+            src = staged if os.path.exists(staged) else new_exe
+            self._install_windows_script(src, tmpdir)
+            return
+        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP: ban moi doc lap voi ban cu (game la app GUI, khong console)
+        subprocess.Popen([exe], creationflags=0x00000008 | 0x00000200, close_fds=True, env=_clean_env(),
+                         cwd=os.path.dirname(exe))
+
+    def _install_windows_script(self, new_exe, tmpdir):
+        """Du phong (vd. khong doi ten duoc): script cho ban cu thoat roi chep de.
+        CREATE_NO_WINDOW (khong kem DETACHED_PROCESS) -> cmd co 1 console AN va moi lenh con
+        (ping, move...) dung chung console do -> khong nhap nhay cua so."""
         exe = os.path.abspath(sys.executable)
         bat = os.path.join(tmpdir, 'update.bat')
         script = f'''@echo off
@@ -162,7 +214,7 @@ move /Y "{new_exe}" "{exe}" >NUL 2>&1
 if errorlevel 1 (
   set /a n+=1
   if %n% GEQ 60 goto fail
-  timeout /t 1 /nobreak >NUL
+  ping -n 2 127.0.0.1 >NUL
   goto retry
 )
 start "" "{exe}"
@@ -174,8 +226,7 @@ del "%~f0"
 '''
         with open(bat, 'w', encoding='mbcs' if os.name == 'nt' else 'utf-8') as f:
             f.write(script)
-        flags = 0x08000000 | 0x00000008     # CREATE_NO_WINDOW | DETACHED_PROCESS
-        subprocess.Popen(['cmd', '/c', bat], creationflags=flags, close_fds=True, env=_clean_env())
+        subprocess.Popen(['cmd', '/c', bat], creationflags=0x08000000, close_fds=True, env=_clean_env())
 
     def _install_macos(self, dmg, tmpdir):
         exe = os.path.abspath(sys.executable)

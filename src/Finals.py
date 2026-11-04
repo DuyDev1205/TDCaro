@@ -242,6 +242,7 @@ def best_move(b, col):
 
 import ai_engine_v2
 import updater
+import shortcuts
 
 APP_VERSION = '1.0.0'
 
@@ -1994,6 +1995,7 @@ class App:
         self.updater = updater.Updater(APP_VERSION)
         if not os.environ.get('CARO_NO_UPDATE'):
             self.updater.check_async()
+        shortcuts.ensure_async(APP_VERSION)        # shortcut Desktop + Start Menu (lan dau / sau cap nhat)
         self.floats = FloatingSymbols()
         self.menu = MenuScreen(self)
         self.game = GameScreen(self)

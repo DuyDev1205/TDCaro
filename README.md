@@ -28,6 +28,7 @@
 - **Toàn màn hình** (F11 / Alt+Enter hoặc nút trên màn hình)
 - AI chạy trên luồng riêng → giao diện không bị đơ
 - **Tự động cập nhật**: game tự kiểm tra bản mới trên GitHub Releases và cập nhật bằng một cú bấm
+- Tự tạo **shortcut TDCaro** trên Desktop và Start Menu (Windows) khi mở lần đầu và sau mỗi lần cập nhật
 
 ## Cài đặt
 
