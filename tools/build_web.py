@@ -15,7 +15,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = os.path.join(ROOT, 'build', 'web_app')
-SRC_FILES = ['Finals.py', 'ai_engine_v2.py', 'online.py', 'updater.py', 'shortcuts.py']
+SRC_FILES = ['Finals.py', 'ai_engine_v2.py', 'online.py', 'relay.py', 'updater.py', 'shortcuts.py']
 
 
 def main():

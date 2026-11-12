@@ -2329,8 +2329,7 @@ class LobbyScreen:
         blit_center(surf, themed_piece('o', px(30), th, False), (c.x + pad + px(43), c.y + px(52)))
         draw_text(surf, 'Chơi online', px(26), th['text'], (c.x + pad + px(68), c.y + px(52)), 'black', 'midleft')
         st = self.net.status if self.net else 'idle'
-        label, col = {'online': ('Đã kết nối', (70, 200, 120)), 'connecting': ('Đang kết nối…', th['gold'])}.get(
-            st, ('Mất kết nối — đang thử lại', th['x']))
+        label, col = {'online': ('Đã kết nối', (70, 200, 120))}.get(st, ('Đang kết nối…', th['gold']))
         ts = text_surf(label, px(12), th['text'], 'semibold')
         pr = pygame.Rect(0, 0, ts.get_width() + px(36), px(28))
         pr.midright = (c.right - pad, c.y + px(52))
@@ -2338,7 +2337,7 @@ class LobbyScreen:
         a = 1.0 if st == 'online' else 0.45 + 0.55 * abs(math.sin(now * 3))
         pygame.draw.circle(surf, lerp_color(th['panel_alt'], col, a), (pr.x + px(15), pr.centery), max(3, px(4)))
         surf.blit(ts, ts.get_rect(midleft=(pr.x + px(25), pr.centery)))
-        draw_text(surf, 'Chơi cùng bạn bè qua mạng: một người tạo phòng, người kia nhập mã.', px(13),
+        draw_text(surf, 'Chơi cùng bạn bè qua Internet: một người tạo phòng, người kia nhập mã.', px(13),
                   th['text_dim'], (c.x + pad, c.y + px(86)), 'regular', 'midleft')
 
         room = self.waiting_room()
@@ -2359,8 +2358,8 @@ class LobbyScreen:
             err = self.net.error if self.net else None
             if err:
                 draw_text(surf, err[1], px(13), th['x'], self.r_err.center, 'semibold', 'center')
-            elif st == 'offline':
-                draw_text(surf, 'Không kết nối được máy chủ. Kiểm tra mạng, game sẽ tự thử lại.', px(13),
+            elif st != 'online':
+                draw_text(surf, 'Đang kết nối mạng chuyển tiếp… (cần có Internet)', px(13),
                           th['text_dim'], self.r_err.center, 'regular', 'center')
         for b in self.buttons():
             b.draw(surf, th)
@@ -2389,6 +2388,8 @@ class LobbyScreen:
             pygame.draw.circle(surf, th['accent'], (x0 + ts.get_width() + px(8) + i * px(8), c.y + px(296) + dy), max(2, px(3)))
         draw_text(surf, 'Bạn bè mở TDCaro → Chơi online → nhập mã → Vào phòng', px(12), th['text_dim'],
                   (c.centerx, c.y + px(410)), 'regular', 'center')
+        draw_text(surf, 'Hãy giữ game mở — phòng chơi chạy ngay trên máy của bạn', px(12), th['gold'],
+                  (c.centerx, c.y + px(432)), 'semibold', 'center')
 
 
 # ==================================== APP ===================================
@@ -2448,6 +2449,23 @@ def make_icon():
     return s
 
 
+def _web_canvas_size():
+    """Khung 16:10 lon nhat vua cua so trinh duyet, nhan devicePixelRatio (toi da 2560 px ngang)."""
+    try:
+        import platform as _pf
+        win = _pf.window
+        dpr = float(win.devicePixelRatio or 1)
+        vw, vh = float(win.innerWidth), float(win.innerHeight)
+        fw = min(vw, vh * 1.6)
+        w = fw * dpr
+        if w > 2560:
+            w = 2560
+        w = max(960, int(w))
+        return w, int(w / 1.6)
+    except Exception:
+        return 1280, 800
+
+
 def _wlog(stage):
     if IS_WEB:
         print(f'[tdcaro] {stage}', flush=True)
@@ -2467,9 +2485,9 @@ class App:
         h = int(w / 1.6)
         w, h = max(960, w), max(620, h)
         if IS_WEB:
-            # web: canvas co dinh (trinh duyet tu co gian cho vua trang), khong dung API cua so
-            w, h = 1280, 800
-            _wlog('set_mode')
+            # web: canvas = dung kich thuoc hien thi that x mat do diem anh (net, khong bi phong to/mo)
+            w, h = _web_canvas_size()
+            _wlog(f'set_mode {w}x{h}')
             self.screen = pygame.display.set_mode((w, h))
         else:
             try:
@@ -2679,6 +2697,15 @@ class App:
     def quit(self):
         self.running = False
 
+    def shutdown_net(self):
+        """Thoat game khi dang online: bao cho doi thu (chu phong dong phong / khach roi phong)."""
+        if self.net:
+            try:
+                self.net.disconnect()
+                time.sleep(0.2)
+            except Exception:
+                pass
+
     # ---- main loop
     def frame(self, events, dt):
         self.now += dt
@@ -2740,6 +2767,7 @@ class App:
                 _wlog(f'frame {n} xong')
             n += 1
             await asyncio.sleep(0)
+        self.shutdown_net()
 
     def run(self):
         clock = pygame.time.Clock()
@@ -2750,6 +2778,7 @@ class App:
             dt = min(clock.tick(30 if thinking else 60) / 1000.0, 0.05)
             self.frame(pygame.event.get(), dt)
             pygame.display.flip()
+        self.shutdown_net()
         pygame.quit()
 
 

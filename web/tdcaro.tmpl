@@ -293,30 +293,33 @@ function show_infobox() {
     <script src="{{cookiecutter.cdn}}/browserfs.min.js"></script>
 
     <script>
-    // TDCaro: WebSocket cho che do choi online (Python goi qua platform.window.tdNet)
-    // thong bao "san sang" dat tu JS (tranh loi ma hoa tieng Viet khi Python gan chuoi)
+        // thong bao "san sang" dat tu JS (tranh loi ma hoa tieng Viet khi Python gan chuoi)
     window.tdReadyMsg = () => { const b = document.getElementById("infobox"); if (b) b.innerText = "Sẵn sàng! Bấm vào màn hình để bắt đầu"; };
-    window.tdNet = (() => {
-        let ws = null, q = [], st = "closed", url = null, retry = 0, want = false, timer = null;
-        function open() {
-            st = "connecting";
-            try { ws = new WebSocket(url); } catch (e) { ws = null; st = "closed"; schedule(); return; }
-            ws.onopen = () => { st = "open"; retry = 0; };
-            ws.onmessage = (e) => { if (typeof e.data === "string") q.push(e.data); };
-            ws.onclose = () => { st = "closed"; ws = null; if (want) schedule(); };
-            ws.onerror = () => {};
-        }
-        function schedule() {
-            clearTimeout(timer);
-            const d = Math.min(8000, 1000 * Math.pow(1.7, retry++));
-            timer = setTimeout(() => { if (want && !ws) open(); }, d);
-        }
+    // TDCaro: WebSocket nhi phan cho che do choi online (MQTT qua broker cong cong).
+    // Python goi qua platform.window.tdSock; du lieu nhi phan truyen dang base64.
+    window.tdSock = (() => {
+        const socks = {}; let n = 0;
+        const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
+        const unb64 = (s) => { const b = atob(s); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
         return {
-            connect(u) { url = u; want = true; if (!ws) open(); return true; },
-            send(s) { if (ws && st === "open") { ws.send(s); return true; } return false; },
-            poll() { const out = JSON.stringify(q); q = []; return out; },
-            status() { return st; },
-            close() { want = false; clearTimeout(timer); if (ws) ws.close(); ws = null; st = "closed"; },
+            open(url, proto) {
+                const id = ++n, o = { q: [], st: "connecting", ws: null };
+                socks[id] = o;
+                try {
+                    const ws = new WebSocket(url, proto ? [proto] : []);
+                    ws.binaryType = "arraybuffer";
+                    o.ws = ws;
+                    ws.onopen = () => { o.st = "open"; };
+                    ws.onclose = () => { o.st = "closed"; };
+                    ws.onerror = () => {};
+                    ws.onmessage = (e) => { if (e.data instanceof ArrayBuffer) o.q.push(b64(new Uint8Array(e.data))); };
+                } catch (e) { o.st = "closed"; }
+                return id;
+            },
+            send(id, s) { const o = socks[id]; if (o && o.ws && o.st === "open") { o.ws.send(unb64(s)); return true; } return false; },
+            poll(id) { const o = socks[id]; if (!o) return "[]"; const out = JSON.stringify(o.q); o.q = []; return out; },
+            status(id) { const o = socks[id]; return o ? o.st : "closed"; },
+            close(id) { const o = socks[id]; if (o && o.ws) { try { o.ws.close(); } catch (e) {} } delete socks[id]; },
         };
     })();
     </script>
