@@ -22,3 +22,6 @@ Desktop.ini
 *.log
 
 tools/make_icon.py
+
+# server
+server/node_modules/
