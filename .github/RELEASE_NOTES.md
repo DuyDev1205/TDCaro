@@ -10,6 +10,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Sửa lỗi web:** nhạc nền không còn giật/rè khi AI đang suy nghĩ (trình duyệt tự phát nhạc); trang web tải nhanh hơn (gói game 4 MB → 0,7 MB)
 - **Mới:** chơi **online 1 vs 1 kiểu P2P** — không cần server riêng; tạo phòng / nhập mã phòng (menu → *Chơi online*, phím `O`); chơi chéo giữa máy tính và trình duyệt
 - **Bản web nét hơn:** vẽ đúng độ phân giải màn hình (kể cả màn Retina/2K)
 - **Mới:** bản **web** chơi ngay trên trình duyệt: https://duydev1205.github.io/TDCaro/

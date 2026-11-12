@@ -29,7 +29,7 @@ def main():
     os.makedirs(a)
     shutil.copy2(os.path.join(ROOT, 'assets', 'icon.png'), a)
     shutil.copy2(os.path.join(ROOT, 'assets', 'icon.png'), os.path.join(APP, 'favicon.png'))
-    shutil.copytree(os.path.join(ROOT, 'assets', 'music'), os.path.join(a, 'music'))
+    # nhac KHONG dong goi vao game: trinh duyet tai rieng tung bai khi phat (goi tai nho hon nhieu)
     shutil.copytree(os.path.join(ROOT, 'assets', 'fonts'), os.path.join(a, 'fonts'))
     args = [sys.executable, '-m', 'pygbag', '--title', 'TDCaro', '--app_name', 'tdcaro', '--width', '1280', '--height', '800',
             '--template', os.path.join(ROOT, 'web', 'tdcaro.tmpl')]
@@ -40,6 +40,7 @@ def main():
     subprocess.check_call(args, cwd=ROOT)
     out = os.path.join(APP, 'build', 'web')
     shutil.copy2(os.path.join(ROOT, 'assets', 'icon.png'), os.path.join(out, 'favicon.png'))
+    shutil.copytree(os.path.join(ROOT, 'assets', 'music'), os.path.join(out, 'music'), dirs_exist_ok=True)
     for extra in ('web_app.apk',):            # GitHub Pages chi can .tar.gz (.apk danh cho itch.io)
         if os.path.exists(os.path.join(out, extra)):
             os.remove(os.path.join(out, extra))

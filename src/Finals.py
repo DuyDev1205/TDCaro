@@ -2475,7 +2475,8 @@ class App:
     def __init__(self):
         _enable_dpi_awareness()
         try:
-            pygame.mixer.pre_init(44100, -16, 2, 512)
+            # web: bo dem lon hon (am thanh tron tren luong chinh, de hut khi AI dang tinh)
+            pygame.mixer.pre_init(44100, -16, 2, 2048 if IS_WEB else 512)
         except Exception:
             pass
         pygame.init()
@@ -2593,6 +2594,16 @@ class App:
         Phat ngau nhien, het bai tu chuyen bai."""
         self.track_idx = -1
         self.tracks = []
+        if IS_WEB:
+            # web: nhac do trinh duyet phat (<audio>, luong rieng) -> khong giat khi AI dang tinh
+            try:
+                import platform as _pf
+                self._web_music = _pf.window.tdMusic
+                self.tracks = [f'music/{k}.ogg' for k in sorted(TRACK_TITLES)]
+                random.shuffle(self.tracks)
+                return self.next_track()
+            except Exception:
+                return False
         try:
             if not pygame.mixer.get_init():
                 return False
@@ -2616,6 +2627,13 @@ class App:
     def next_track(self, fade_ms=1200):
         if not self.tracks:
             return False
+        if IS_WEB:
+            try:
+                self.track_idx = (self.track_idx + 1) % len(self.tracks)
+                self._web_music.play(self.tracks[self.track_idx], 0.5, bool(self.settings['music']))
+                return True
+            except Exception:
+                return False
         try:
             self.track_idx = (self.track_idx + 1) % len(self.tracks)
             pygame.mixer.music.load(self.tracks[self.track_idx])
@@ -2634,7 +2652,12 @@ class App:
 
     def toggle_music(self):
         self.settings['music'] = not self.settings['music']
-        if self.music_ok:
+        if self.music_ok and IS_WEB:
+            try:
+                (self._web_music.resume if self.settings['music'] else self._web_music.pause)()
+            except Exception:
+                pass
+        elif self.music_ok:
             try:
                 if self.settings['music']:
                     pygame.mixer.music.unpause()
@@ -2731,6 +2754,12 @@ class App:
                 self.current.handle(ev)
         if self.updater.want_quit:
             self.running = False
+        if IS_WEB and self.music_ok:
+            try:
+                if self._web_music.ended():         # het bai (trinh duyet bao) -> bai tiep
+                    self.next_track()
+            except Exception:
+                pass
         if self.net:
             msgs = self.net.poll()
             if msgs:

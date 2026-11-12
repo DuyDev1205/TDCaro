@@ -297,6 +297,18 @@ function show_infobox() {
     window.tdReadyMsg = () => { const b = document.getElementById("infobox"); if (b) b.innerText = "Sẵn sàng! Bấm vào màn hình để bắt đầu"; };
     // TDCaro: WebSocket nhi phan cho che do choi online (MQTT qua broker cong cong).
     // Python goi qua platform.window.tdSock; du lieu nhi phan truyen dang base64.
+    // TDCaro: nhac nen do trinh duyet phat (<audio> chay luong rieng -> khong giat khi Python dang tinh)
+    window.tdMusic = (() => {
+        const a = new Audio(); a.preload = "auto"; let ended = false;
+        a.addEventListener("ended", () => { ended = true; });
+        return {
+            play(url, vol, on) { ended = false; a.src = url; a.volume = vol; a.currentTime = 0; if (on) a.play().catch(() => {}); return true; },
+            pause() { a.pause(); return true; },
+            resume() { a.play().catch(() => {}); return true; },
+            ended() { const e = ended; ended = false; return e; },
+            info() { return { src: a.src.split("/").pop(), paused: a.paused, t: a.currentTime, vol: a.volume }; },
+        };
+    })();
     window.tdSock = (() => {
         const socks = {}; let n = 0;
         const b64 = (u8) => { let s = ""; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
