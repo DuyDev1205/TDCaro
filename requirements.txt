@@ -1,3 +1,4 @@
 pygame-ce>=2.5
 pyinstaller>=6.0
 certifi
+websocket-client>=1.6

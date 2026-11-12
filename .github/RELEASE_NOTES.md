@@ -1,6 +1,7 @@
 ## TDCaro
 
 ### Tải về
+- **Web (không cần cài):** https://duydev1205.github.io/TDCaro/
 - **Windows:** `TDCaro-…-Windows.exe` — chạy trực tiếp (SmartScreen cảnh báo thì chọn *More info → Run anyway*).
 - **macOS Apple Silicon (M1/M2/M3…):** `TDCaro-…-macOS-AppleSilicon.dmg`
 - **macOS Intel:** `TDCaro-…-macOS-Intel.dmg`
@@ -9,6 +10,8 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Mới:** chơi **online 1 vs 1** — tạo phòng / nhập mã phòng (menu → *Chơi online*, phím `O`)
+- **Mới:** bản **web** chơi ngay trên trình duyệt: https://duydev1205.github.io/TDCaro/
 - **Mới:** tự tạo shortcut *TDCaro* trên Desktop và Start Menu (Windows) — lần đầu mở và sau mỗi lần cập nhật
 - **Sửa lỗi:** cập nhật trên Windows không còn bật cửa sổ Command Prompt nhấp nháy (thay file tức thì, không cần script)
 - **Mới:** luật **chặn 2 đầu** (mặc định): dãy 5 bị chặn cả hai đầu không thắng — chọn *Tự do* / *Chặn 2 đầu* ở menu (phím `L`); AI hiểu luật mới

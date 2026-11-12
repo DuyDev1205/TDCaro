@@ -119,9 +119,8 @@ function roomState(room, seat) {
   return {
     t: 'state', code: room.code, size: room.size, rule: room.rule, status: room.status,
     you: pl(seat), opp: pl(other), draws: room.scores[2],
-    board: room.board.map((v) => v || '.').join(''),
-    turn: room.turn, moves: room.moves.length,
-    last: room.moves.length ? room.moves[room.moves.length - 1] : null,
+    // moves: [[r, c], ...] theo thu tu; nuoc chan (0, 2, ...) la X (X luon di truoc)
+    turn: room.turn, moves: room.moves,
     winner: room.winner, line: room.line, reason: room.reason,
   };
 }

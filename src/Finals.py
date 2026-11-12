@@ -19,6 +19,8 @@ from array import array
 os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
 import pygame
 
+IS_WEB = sys.platform == 'emscripten'      # ban web (pygbag / WebAssembly)
+
 
 # ==========================================
 # BOARD LOGIC & AI ENGINE (PRESERVED CORE)
@@ -243,6 +245,7 @@ def best_move(b, col):
 import ai_engine_v2
 import updater
 import shortcuts
+import online
 
 APP_VERSION = '1.0.0'
 
@@ -427,20 +430,32 @@ _FONT_FILES = {
 }
 
 
+_BUNDLED_FONT = {'regular': 'Regular', 'semibold': 'SemiBold', 'bold': 'Bold', 'black': 'Black'}
+
+
 def get_font(size, weight='regular'):
     key = (size, weight)
     f = _font_cache.get(key)
     if f is not None:
         return f
     fdir = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts')
-    for name in _FONT_FILES.get(weight, _FONT_FILES['regular']):
-        p = os.path.join(fdir, name)
-        if os.path.isfile(p):
-            try:
-                f = pygame.font.Font(p, size)
-                break
-            except Exception:
-                f = None
+    if os.environ.get('TDCARO_FONT') != 'bundled':
+        for name in _FONT_FILES.get(weight, _FONT_FILES['regular']):
+            p = os.path.join(fdir, name)
+            if os.path.isfile(p):
+                try:
+                    f = pygame.font.Font(p, size)
+                    break
+                except Exception:
+                    f = None
+    if f is None:
+        # khong co phong Windows (web, macOS): dung phong kem theo game (ho tro tieng Viet day du)
+        try:
+            p = resource_path(os.path.join('assets', 'fonts', f'BeVietnamPro-{_BUNDLED_FONT.get(weight, "Regular")}.ttf'))
+            if os.path.isfile(p):
+                f = pygame.font.Font(p, int(size * 0.94))      # Be Vietnam Pro rong hon Segoe UI mot chut
+        except Exception:
+            f = None
     if f is None:
         f = pygame.font.SysFont('segoeui,arial,dejavusans,tahoma', size, bold=(weight != 'regular'))
     _font_cache[key] = f
@@ -926,6 +941,7 @@ class MenuScreen:
         self.app = app
         st = app.settings
         self.btn_start = Button('BẮT ĐẦU CHƠI', app.start_game, 'primary', 'SPACE', font_size=18, radius=16)
+        self.btn_online = Button('CHƠI ONLINE', app.go_online, hotkey='O', font_size=16, radius=14)
         self.btn_quit = Button('Thoát', app.quit, hotkey='ESC')
         self.btn_sound = Button(lambda: 'Âm thanh: Bật' if st['sound'] else 'Âm thanh: Tắt', app.toggle_sound, hotkey='M')
         self.btn_minus = Button('−', lambda: self.change_size(-1), font_size=24, radius=14,
@@ -953,7 +969,8 @@ class MenuScreen:
                                 enabled=lambda: any(app.scores.values()))
         self.btn_next = Button('Bài tiếp', app.skip_track, font_size=13, radius=20,
                                enabled=lambda: app.music_ok and len(app.tracks) > 1)
-        self.buttons = ([self.btn_update, self.btn_full, self.btn_next, self.btn_music, self.btn_reset, self.btn_start, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
+        self.buttons = ([self.btn_update, self.btn_full, self.btn_next, self.btn_music, self.btn_reset, self.btn_start,
+                         self.btn_online, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
                          self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.rule_chips +
                         self.swatches)
         self.size_pulse = 0.0
@@ -1044,7 +1061,7 @@ class MenuScreen:
 
         # left column
         self.title_s = gradient_text('TDCaro', px(108), 'black', self.app.th['x'], self.app.th['o'])
-        left_h = px(84) + px(10) + self.title_s.get_height() + px(14) + px(30) + px(16) + px(48) + px(24) + px(48) + px(28) + px(60) + px(12) + px(46)
+        left_h = px(84) + px(10) + self.title_s.get_height() + px(14) + px(30) + px(16) + px(48) + px(24) + px(48) + px(28) + px(60) + px(12) + px(50) + px(12) + px(46)
         y = (H - left_h) // 2 - px(12)
         self.ly = y
         self.logo_y = y + px(42)
@@ -1060,9 +1077,14 @@ class MenuScreen:
         bw = px(380)
         self.btn_start.rect = pygame.Rect(lx, y, bw, px(60))
         y += px(60) + px(12)
+        self.btn_online.rect = pygame.Rect(lx, y, bw, px(50))
+        y += px(50) + px(12)
         hw = (bw - px(12)) // 2
         self.btn_quit.rect = pygame.Rect(lx, y, hw, px(46))
         self.btn_sound.rect = pygame.Rect(lx + hw + px(12), y, bw - hw - px(12), px(46))
+        if IS_WEB:                      # trinh duyet: khong co "Thoat"
+            self.btn_quit.rect = pygame.Rect(0, 0, 0, 0)
+            self.btn_sound.rect = pygame.Rect(lx, y, bw, px(46))
 
     # ---- loop
     def handle(self, ev):
@@ -1086,6 +1108,8 @@ class MenuScreen:
                 self.set_first('ai' if self.app.settings['first'] == 'player' else 'player')
             elif k == pygame.K_l:
                 self.toggle_rule()
+            elif k == pygame.K_o:
+                self.app.go_online()
             elif k == pygame.K_d:
                 self.cycle_level()
             elif k == pygame.K_m:
@@ -1194,7 +1218,7 @@ class MenuScreen:
             cx += p.get_width() + (gaps[i] if i < len(gaps) else 0)
 
         self.btn_reset.draw(surf, th)
-        for b in (self.btn_start, self.btn_quit, self.btn_sound):
+        for b in (self.btn_start, self.btn_online, self.btn_quit, self.btn_sound):
             b.draw(surf, th)
 
         # ----- settings card
@@ -1215,7 +1239,7 @@ class MenuScreen:
             b.draw(surf, th)
 
         # footer
-        draw_text(surf, 'Space: bắt đầu  ·  ←/→: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
+        draw_text(surf, 'Space: bắt đầu  ·  Mũi tên: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
         self.btn_full.draw(surf, th)
@@ -1231,13 +1255,16 @@ class GameScreen:
     def __init__(self, app):
         self.app = app
         st = app.settings
-        self.btn_new = Button('Ván mới', self.new_game, 'primary', 'N', font_size=15)
+        self.online = False             # True: dang choi online (doi thu la nguoi that)
+        self.ost = None                 # trang thai phong moi nhat tu server
+        self.btn_new = Button(self.new_label, self.new_game, 'primary', 'N', font_size=15,
+                              enabled=lambda: not self.online or self.rematch_ok())
         self.btn_undo = Button('Đi lại', self.undo, hotkey='U', enabled=self.can_undo, font_size=14)
         self.btn_hint = Button('Gợi ý', self.request_hint, hotkey='H', enabled=self.can_hint, font_size=14)
         self.btn_theme = Button('Giao diện', app.cycle_theme, hotkey='T', font_size=14)
         self.btn_sound = Button(lambda: 'Âm thanh: Bật' if st['sound'] else 'Âm thanh: Tắt',
                                 app.toggle_sound, hotkey='M', font_size=14)
-        self.btn_menu = Button('Về menu', app.go_menu, hotkey='ESC', font_size=14)
+        self.btn_menu = Button(lambda: 'Rời phòng' if self.online else 'Về menu', self.go_back, hotkey='ESC', font_size=14)
         self.btn_full = Button(lambda: 'Thu nhỏ' if app.fullscreen else 'Toàn màn hình',
                                app.toggle_fullscreen, hotkey='F11', font_size=14)
         self.btn_music = Button(lambda: 'Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt',
@@ -1245,7 +1272,8 @@ class GameScreen:
         self.buttons = [self.btn_new, self.btn_undo, self.btn_hint, self.btn_theme, self.btn_sound, self.btn_menu,
                         self.btn_full, self.btn_music]
         modal_ok = lambda: self.modal_t > 0.85
-        self.btn_again = Button('Ván mới', self.new_game, 'primary', 'N', enabled=modal_ok, font_size=15)
+        self.btn_again = Button(self.new_label, self.new_game, 'primary', 'N',
+                                enabled=lambda: modal_ok() and (not self.online or self.rematch_ok()), font_size=15)
         self.btn_view = Button('Xem bàn cờ', self.hide_modal, enabled=modal_ok, font_size=15)
         self.modal_buttons = [self.btn_again, self.btn_view]
         self.confetti = Confetti()
@@ -1282,8 +1310,114 @@ class GameScreen:
         self.end_time = None
         self.toast = None
         self.pill_rect = pygame.Rect(0, 0, 0, 0)
+        self.pending = False            # online: da gui nuoc, cho server xac nhan
+
+    # ------------------------------------------------------------ online
+    def new_label(self):
+        if not self.online:
+            return 'Ván mới'
+        st = self.ost or {}
+        if (st.get('you') or {}).get('rematch'):
+            return 'Đang chờ đối thủ…'
+        if (st.get('opp') or {}).get('rematch'):
+            return 'Đồng ý chơi lại'
+        return 'Chơi lại'
+
+    def rematch_ok(self):
+        st = self.ost or {}
+        return st.get('status') == 'over' and st.get('opp') is not None and not (st.get('you') or {}).get('rematch')
+
+    def go_back(self):
+        if self.online:
+            self.app.leave_online_game()
+        else:
+            self.app.go_menu()
+
+    def start_online(self, st):
+        self.online = True
+        self.token += 1
+        self.ost = None
+        self._online_reset(st)
+        self.apply_state(st)
+
+    def stop_online(self):
+        self.online = False
+        self.ost = None
+        self.cancel_jobs()
+
+    def _online_reset(self, st):
+        self.reset_state()
+        self.N = st['size']
+        self.block = st['rule'] == 'block'
+        self.board = make_empty_board(self.N)
+        self.layout()
+
+    def apply_state(self, st):
+        """Dong bo ban co voi trang thai phong tu server (server la trong tai)."""
+        prev = self.ost
+        self.ost = st
+        self.pending = False
+        me = (st.get('you') or {}).get('color', 'x')
+        moves = st.get('moves') or []
+        mine = [(r, c) for (c, r, _) in self.moves]
+        new_game = (prev is not None and prev.get('status') == 'over' and st.get('status') == 'playing') or \
+            len(moves) < len(mine) or [tuple(m) for m in moves[:len(mine)]] != mine or st['size'] != self.N
+        if new_game:
+            self._online_reset(st)
+            if prev is not None:
+                self.show_toast('Ván mới bắt đầu!' if st.get('status') == 'playing' else 'Đã đồng bộ lại bàn cờ')
+        start = len(self.moves)
+        for i in range(start, len(moves)):
+            r, c = moves[i]
+            color = 'x' if i % 2 == 0 else 'o'
+            who = 'player' if color == me else 'ai'
+            self.board[r][c] = 'r' if who == 'player' else 'w'
+            self.moves.append((c, r, who))
+            if i == len(moves) - 1:
+                self.anim[(c, r)] = self.app.now
+                self.app.sound.play('place' if who == 'player' else 'ai')
+        status = st.get('status')
+        if status == 'playing':
+            self.turn = 'player' if st.get('turn') == me else 'ai'
+        if status == 'over' and not self.over:
+            w = st.get('winner')
+            res = 'Draw' if w == 'draw' else ('Player Win' if w == me else 'NPC Win')
+            self.rule_line = [tuple(x) for x in (st.get('line') or [])] or None
+            self.finish(res)
+        # doi thu vua roi phong / mat ket noi -> bao
+        if prev is not None:
+            po, no = prev.get('opp'), st.get('opp')
+            if po and not no:
+                self.show_toast('Đối thủ đã rời phòng')
+            elif po and no and po.get('online') and not no.get('online'):
+                self.show_toast(f'{no["name"]} mất kết nối — chờ tối đa 60 giây')
+            elif po and no and not po.get('online') and no.get('online'):
+                self.show_toast(f'{no["name"]} đã quay lại')
+            elif no and no.get('rematch') and not (po or {}).get('rematch'):
+                self.show_toast(f'{no["name"]} muốn chơi ván nữa')
+
+    def on_net(self, msgs):
+        net = self.app.net
+        if any(m.get('t') == 'state' for m in msgs) and net.state:
+            self.apply_state(net.state)
+        for m in msgs:
+            if m.get('t') == 'error':
+                self.pending = False
+                self.show_toast(m.get('msg') or 'Có lỗi xảy ra')
+            elif m.get('t') == '_offline':
+                self.show_toast('Mất kết nối — đang kết nối lại…')
+            elif m.get('t') == 'left':
+                self.app.leave_online_game(already_left=True)
+
+    def opp_name(self):
+        return ((self.ost or {}).get('opp') or {}).get('name') or 'Đối thủ'
 
     def new_game(self):
+        if self.online:
+            if self.rematch_ok():
+                self.app.net.rematch()
+                self.show_toast('Đã gửi lời mời chơi lại')
+            return
         self.token += 1
         self.reset_state()
         self.layout()
@@ -1310,26 +1444,39 @@ class GameScreen:
                 except Exception:
                     job['result'] = None
             job['done'] = True
-        threading.Thread(target=work, daemon=True).start()
+        if IS_WEB:
+            job['work'] = work          # WebAssembly khong co luong: chay o update() sau khi da ve 1 frame
+        else:
+            threading.Thread(target=work, daemon=True).start()
         return job
 
     def start_ai(self):
+        if self.online:
+            return
         self.ai_job = self._run_job('w', self.level)
 
     def can_play(self):
+        if self.online:
+            return (not self.over and self.turn == 'player' and not self.pending and not self.modal_visible and
+                    (self.ost or {}).get('status') == 'playing')
         return not self.over and self.turn == 'player' and self.ai_job is None and not self.modal_visible
 
     def can_undo(self):
-        return self.ai_job is None and any(m[2] == 'player' for m in self.moves) and (self.over or self.turn == 'player')
+        return not self.online and self.ai_job is None and any(m[2] == 'player' for m in self.moves) and (self.over or self.turn == 'player')
 
     def can_hint(self):
-        return self.can_play() and self.hint_job is None
+        return not self.online and self.can_play() and self.hint_job is None
 
     def request_hint(self):
         if self.can_hint():
             self.hint_job = self._run_job('r', 'hard')
 
     def place(self, c, r, who):
+        if self.online:
+            # online: chi gui nuoc len server; ban co cap nhat khi server xac nhan (apply_state)
+            if who == 'player' and self.app.net and self.app.net.move(r, c):
+                self.pending = True
+            return
         self.board[r][c] = 'r' if who == 'player' else 'w'
         self.moves.append((c, r, who))
         self.anim[(c, r)] = self.app.now
@@ -1357,20 +1504,23 @@ class GameScreen:
         self.turn = None
         self.end_time = time.perf_counter()
         col = None
+        scores = self.app.scores if not self.online else {'player': 0, 'ai': 0, 'draw': 0}   # online: ti so do server giu
         if res == 'Player Win':
-            self.app.scores['player'] += 1
+            scores['player'] += 1
             col = 'r'
             self.app.sound.play('win')
             self.confetti_pending = True
         elif res == 'NPC Win':
-            self.app.scores['ai'] += 1
+            scores['ai'] += 1
             col = 'w'
             self.app.sound.play('lose')
         else:
-            self.app.scores['draw'] += 1
+            scores['draw'] += 1
             self.app.sound.play('draw')
         self.win_cells = []
-        if col and self.block and self.rule_line:
+        if col and self.online:
+            self.win_cells = [(cc, rr) for rr, cc in (self.rule_line or [])]
+        elif col and self.block and self.rule_line:
             self.win_cells = [(cc, rr) for rr, cc in self.rule_line]
         elif col:
             line = find_winning_line(self.board, col)              # AI ENGINE GOC
@@ -1509,10 +1659,10 @@ class GameScreen:
                 self.app.toggle_sound()
             elif k == pygame.K_b:
                 self.app.toggle_music()
-            elif k == pygame.K_r:
+            elif k == pygame.K_r and not self.online:
                 self.app.reset_scores()
             elif k in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
-                self.app.go_menu()
+                self.go_back()
 
     def update(self, dt):
         app, now = self.app, self.app.now
@@ -1523,6 +1673,10 @@ class GameScreen:
         for b in self.modal_buttons:
             b.update(dt, mouse if modal_on else (-999, -999))
 
+        # web: chay viec AI dang cho (sau khi da ve it nhat 1 frame "dang suy nghi")
+        for j in (self.ai_job, self.hint_job):
+            if j and 'work' in j and time.perf_counter() - j['t0'] > 0.06:
+                j.pop('work')()
         # ket qua AI
         job = self.ai_job
         if job and job['done'] and time.perf_counter() - job['t0'] >= AI_MIN_THINK:
@@ -1716,9 +1870,23 @@ class GameScreen:
         surf.blit(round_rect_surf(r.w, r.h, px(16), bg, color if hl else th['border'], px(2) if hl else 1), r)
         bob = math.sin(now * 4) * px(2) if active else 0
         blit_center(surf, themed_piece(kind, px(34), th), (r.centerx, r.y + px(32) + bob))
-        name = 'BẠN' if who == 'player' else 'MÁY (AI)'
+        if self.online:
+            st = self.ost or {}
+            pl = st.get('you') if who == 'player' else st.get('opp')
+            name = 'BẠN' if who == 'player' else (pl['name'].upper() if pl else 'ĐANG CHỜ…')
+            while text_surf(name, px(11), th['text_dim'], 'bold').get_width() > r.w - px(24) and len(name) > 3:
+                name = name[:-2] + '…'
+            sc = pl['score'] if pl else 0
+            if who == 'ai' and pl and not pl.get('online'):
+                tag = spaced_text_surf('MẤT KẾT NỐI', px(9), th['on_accent'], 'bold', px(1))
+                trr = pygame.Rect(0, 0, tag.get_width() + px(16), px(20))
+                trr.center = (r.centerx, r.bottom)
+                surf.blit(round_rect_surf(trr.w, trr.h, px(9), th['gold']), trr)
+                surf.blit(tag, tag.get_rect(center=trr.center))
+        else:
+            name = 'BẠN' if who == 'player' else 'MÁY (AI)'
+            sc = self.app.scores['player' if who == 'player' else 'ai']
         draw_spaced(surf, name, px(11), th['text_dim'], (r.centerx, r.y + px(64)), 'bold', anchor='center')
-        sc = self.app.scores['player' if who == 'player' else 'ai']
         draw_text(surf, str(sc), px(30), color if hl else th['text'], (r.centerx, r.y + px(96)), 'black', 'center')
         if active or won:
             tag = 'ĐẾN LƯỢT' if active else 'CHIẾN THẮNG'
@@ -1738,7 +1906,8 @@ class GameScreen:
         tx = r.x + px(58)
         draw_text(surf, 'TDCaro', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
         draw_text(surf, 'Luật chặn 2 đầu' if self.block else 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
-        ts = text_surf(f'{self.N}×{self.N} · {LEVEL_NAMES[self.level]}', px(12), th['text'], 'bold')
+        mode = f'Online · {(self.ost or {}).get("code", "")}' if self.online else LEVEL_NAMES[self.level]
+        ts = text_surf(f'{self.N}×{self.N} · {mode}', px(12), th['text'], 'bold')
         pr = pygame.Rect(0, 0, ts.get_width() + px(20), px(28))
         pr.midright = r.midright
         surf.blit(round_rect_surf(pr.w, pr.h, px(14), th['panel_alt'], th['border'], 1), pr)
@@ -1755,14 +1924,22 @@ class GameScreen:
 
         # status
         rs = self.r_status
-        if self.over:
+        opp_label = self.opp_name() if self.online else 'AI'
+        if self.online and self.over and (self.ost or {}).get('reason') == 'forfeit' and self.result == 'Player Win':
+            draw_text(surf, 'Đối thủ bỏ cuộc — bạn thắng!', px(17), th['x'], rs.center, 'bold', 'center')
+        elif self.over:
             txt, col = {'Player Win': ('Bạn đã chiến thắng!', th['x']),
-                        'NPC Win': ('AI đã chiến thắng!', th['o'])}.get(self.result, ('Hòa cờ!', th['gold']))
+                        'NPC Win': (f'{opp_label} đã chiến thắng!', th['o'])}.get(self.result, ('Hòa cờ!', th['gold']))
             draw_text(surf, txt, px(18), col, rs.center, 'bold', 'center')
+        elif self.online and (self.ost or {}).get('status') != 'playing':
+            draw_text(surf, 'Đang chờ đối thủ…', px(16), th['text_dim'], rs.center, 'bold', 'center')
         elif self.turn == 'player':
             draw_text(surf, 'Lượt của bạn — hãy đặt quân X', px(16), th['x'], rs.center, 'bold', 'center')
         else:
-            ts = text_surf('AI đang suy nghĩ', px(16), th['o'], 'bold')
+            ts = text_surf(f'{opp_label} đang suy nghĩ' if self.online else 'AI đang suy nghĩ', px(16), th['o'], 'bold')
+            while ts.get_width() > rs.w - px(40) and len(opp_label) > 4:
+                opp_label = opp_label[:-2] + '…'
+                ts = text_surf(f'{opp_label} đang suy nghĩ', px(16), th['o'], 'bold')
             dots_w = px(26)
             x0 = rs.centerx - (ts.get_width() + dots_w) // 2
             surf.blit(ts, ts.get_rect(midleft=(x0, rs.centery)))
@@ -1830,10 +2007,14 @@ class GameScreen:
         draw_card(tmp, card, px(26), th['panel'], th['border'], 1, (px(36), 160 if th['dark'] else 110, px(16)))
 
         res = self.result
+        opp = self.opp_name() if self.online else 'AI'
+        forfeit = self.online and (self.ost or {}).get('reason') == 'forfeit'
         if res == 'Player Win':
-            col, title, sub = th['x'], 'CHIẾN THẮNG!', 'Bạn đã nối thành công 5 quân liên tiếp.'
+            col, title = th['x'], 'CHIẾN THẮNG!'
+            sub = f'{opp} đã rời phòng.' if forfeit else 'Bạn đã nối thành công 5 quân liên tiếp.'
         elif res == 'NPC Win':
-            col, title, sub = th['o'], 'THẤT BẠI!', 'AI đã nối được 5 quân. Thử lại nhé!'
+            col, title = th['o'], 'THẤT BẠI!'
+            sub = 'Bạn đã rời ván.' if forfeit else f'{opp} đã nối được 5 quân. Thử lại nhé!'
         else:
             col, title, sub = th['gold'], 'HÒA CỜ!', 'Không bên nào có thể giành chiến thắng.'
         ic = (card.centerx, card.y + px(66))
@@ -1850,7 +2031,11 @@ class GameScreen:
         draw_text(tmp, title, px(32), col, (card.centerx, card.y + px(140)), 'black', 'center')
         draw_text(tmp, sub, px(15), th['text_dim'], (card.centerx, card.y + px(178)), 'regular', 'center')
         elapsed = (self.end_time or time.perf_counter()) - self.start_time
-        sc = self.app.scores
+        if self.online:
+            st = self.ost or {}
+            sc = {'player': (st.get('you') or {}).get('score', 0), 'ai': (st.get('opp') or {}).get('score', 0)}
+        else:
+            sc = self.app.scores
         info = f'{len(self.moves)} nước đi   ·   {fmt_time(elapsed)}   ·   Tỉ số {sc["player"]} – {sc["ai"]}'
         ir = pygame.Rect(0, 0, card.w - px(56), px(34))
         ir.center = (card.centerx, card.y + px(220))
@@ -1865,8 +2050,9 @@ class GameScreen:
         # pill sau khi an modal
         self.pill_rect = pygame.Rect(0, 0, 0, 0)
         if self.over and self.modal_t < 0.05:
-            txt = {'Player Win': 'Bạn thắng', 'NPC Win': 'AI thắng'}.get(self.result, 'Hòa cờ')
-            ts = text_surf(f'{txt}  ·  Nhấn N để chơi ván mới  ·  Bấm vào đây để xem kết quả', px(13), th['on_accent'], 'semibold')
+            txt = {'Player Win': 'Bạn thắng', 'NPC Win': f'{self.opp_name() if self.online else "AI"} thắng'}.get(self.result, 'Hòa cờ')
+            act = 'Nhấn N để chơi lại' if self.online else 'Nhấn N để chơi ván mới'
+            ts = text_surf(f'{txt}  ·  {act}  ·  Bấm vào đây để xem kết quả', px(13), th['on_accent'], 'semibold')
             pr = pygame.Rect(0, 0, ts.get_width() + px(32), px(36))
             pr.center = (self.area.centerx, self.slab.bottom + self.depth + px(4))
             draw_card(surf, pr, px(18), th['accent'], None, 0, (px(14), 110, px(5)))
@@ -1901,6 +2087,308 @@ class GameScreen:
         self.draw_overlays(surf, th, now)
         self.draw_modal(surf, th, now)
         self.confetti.draw(surf)
+
+
+# ================================ ONLINE: O NHAP CHU =========================
+
+class TextField:
+    def __init__(self, placeholder, max_len=16, upper=False, allowed=None, on_enter=None):
+        self.placeholder = placeholder
+        self.max_len = max_len
+        self.upper = upper
+        self.allowed = allowed          # chuoi ky tu cho phep (None = moi ky tu)
+        self.on_enter = on_enter
+        self.text = ''
+        self.focus = False
+        self.rect = pygame.Rect(0, 0, 0, 0)
+        self.t_focus = 0.0
+
+    def _accept(self, s):
+        if self.upper:
+            s = s.upper()
+        if self.allowed is not None:
+            s = ''.join(ch for ch in s if ch in self.allowed)
+        s = ''.join(ch for ch in s if ch.isprintable())
+        self.text = (self.text + s)[:self.max_len]
+
+    def handle(self, ev, now):
+        if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            was = self.focus
+            self.focus = self.rect.collidepoint(ev.pos)
+            if self.focus and not was:
+                self.t_focus = now
+            return self.focus
+        if not self.focus:
+            return False
+        if ev.type == pygame.TEXTINPUT:
+            self._accept(ev.text)
+            return True
+        if ev.type == pygame.KEYDOWN:
+            if ev.key == pygame.K_BACKSPACE:
+                self.text = self.text[:-1]
+            elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                if self.on_enter:
+                    self.on_enter()
+            elif ev.key == pygame.K_v and ev.mod & pygame.KMOD_CTRL:
+                try:
+                    self._accept(pygame.scrap.get_text() or '')
+                except Exception:
+                    pass
+            elif ev.key == pygame.K_ESCAPE:
+                self.focus = False
+            return True       # khi dang go, khong de phim tat khac an phim
+        return False
+
+    def draw(self, surf, th, now, font_size=16, center=False):
+        r = self.rect
+        border = th['accent'] if self.focus else th['border']
+        surf.blit(round_rect_surf(r.w, r.h, px(12), th['panel_alt'], border, px(2) if self.focus else 1), r.topleft)
+        txt = self.text
+        col = th['text'] if txt else th['text_dim']
+        ts = text_surf(txt or self.placeholder, px(font_size), col, 'bold' if (center and txt) else 'semibold')
+        if center:
+            tr = ts.get_rect(center=r.center)
+        else:
+            tr = ts.get_rect(midleft=(r.x + px(14), r.centery))
+        surf.blit(ts, tr)
+        if self.focus and int((now - self.t_focus) * 2) % 2 == 0:
+            cx = (tr.right + px(2)) if txt else (tr.x if not center else r.centerx)
+            pygame.draw.line(surf, th['accent'], (cx, r.centery - px(11)), (cx, r.centery + px(11)), max(2, px(2)))
+
+
+# ================================ ONLINE: SANH CHO ===========================
+
+CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+class LobbyScreen:
+    def __init__(self, app):
+        self.app = app
+        self.name_f = TextField('Tên của bạn', 16, on_enter=self.commit_name)
+        self.code_f = TextField('MÃ PHÒNG', 6, upper=True, allowed=CODE_ALPHABET, on_enter=self.join)
+        self.btn_create = Button('Tạo phòng', self.create, 'primary', font_size=15, enabled=self.ready)
+        self.btn_join = Button('Vào phòng', self.join, 'primary', font_size=15,
+                               enabled=lambda: self.ready() and len(self.code_f.text) == 6)
+        self.btn_back = Button('Quay lại', self.back, hotkey='ESC', font_size=14)
+        self.btn_copy = Button(lambda: 'Đã sao chép!' if self.app.now - self.copied_t < 1.5 else 'Sao chép mã',
+                               self.copy_code, 'primary', font_size=15)
+        self.btn_cancel = Button('Huỷ phòng', self.cancel_room, font_size=15)
+        self.copied_t = -9.0
+        self.want_hand = False
+
+    # ---- trang thai
+    @property
+    def net(self):
+        return self.app.net
+
+    def ready(self):
+        return self.net is not None and self.net.status == 'online'
+
+    def waiting_room(self):
+        """Phong minh tao (hoac con lai sau khi doi thu roi) dang cho nguoi vao."""
+        st = self.net.state if self.net else None
+        return st if (st and st.get('opp') is None) else None
+
+    def enter(self):
+        self.name_f.text = self.net.name
+        self.code_f.text = ''
+        self.name_f.focus = self.code_f.focus = False
+        self.layout()
+
+    # ---- hanh dong
+    def commit_name(self):
+        if self.net and self.name_f.text.strip() and self.name_f.text.strip() != self.net.name:
+            self.net.set_name(self.name_f.text)
+        self.name_f.focus = False
+
+    def create(self):
+        self.commit_name()
+        st = self.app.settings
+        self.net.create(st['size'], st['rule'])
+
+    def join(self):
+        if len(self.code_f.text) == 6 and self.ready():
+            self.commit_name()
+            self.net.join(self.code_f.text)
+
+    def copy_code(self):
+        st = self.waiting_room()
+        if not st:
+            return
+        try:
+            pygame.scrap.put_text(st['code'])
+        except Exception:
+            try:
+                if sys.platform == 'emscripten':
+                    import platform as _pf
+                    _pf.window.navigator.clipboard.writeText(st['code'])
+            except Exception:
+                pass
+        self.copied_t = self.app.now
+
+    def cancel_room(self):
+        if self.net:
+            self.net.leave()
+
+    def back(self):
+        if self.waiting_room():
+            self.cancel_room()
+            return
+        self.app.leave_online_lobby()
+
+    # ---- mang
+    def on_net(self, msgs):
+        st = self.net.state
+        if st and IS_WEB and st.get('code') != getattr(self, '_logged_code', None):
+            self._logged_code = st.get('code')
+            _wlog(f'phong {st.get("code")}')
+        if st and st.get('opp') and st.get('status') in ('playing', 'over'):
+            self.app.start_online_game(st)
+
+    # ---- bo cuc
+    def layout(self):
+        W, H = self.app.size
+        cw, ch = px(560), px(560)
+        self.card = pygame.Rect((W - cw) // 2, (H - ch) // 2, cw, ch)
+        c = self.card
+        pad = px(36)
+        x, w = c.x + pad, c.w - 2 * pad
+        y = c.y + px(118)
+        self.lbl_name = (x, y)
+        self.name_f.rect = pygame.Rect(x, y + px(26), w, px(48))
+        y += px(26) + px(48) + px(30)
+        self.lbl_create = (x, y)
+        bw = px(150)
+        self.r_create_info = pygame.Rect(x, y + px(26), w - bw - px(12), px(48))
+        self.btn_create.rect = pygame.Rect(x + w - bw, y + px(26), bw, px(48))
+        y += px(26) + px(48) + px(30)
+        self.lbl_join = (x, y)
+        self.code_f.rect = pygame.Rect(x, y + px(26), w - bw - px(12), px(48))
+        self.btn_join.rect = pygame.Rect(x + w - bw, y + px(26), bw, px(48))
+        y += px(26) + px(48) + px(22)
+        self.r_err = pygame.Rect(x, y, w, px(24))
+        self.btn_back.rect = pygame.Rect(x, c.bottom - pad - px(44), px(150), px(44))
+        # phong cho
+        self.r_code = pygame.Rect(x, c.y + px(150), w, px(84))
+        hw = (w - px(12)) // 2
+        self.btn_copy.rect = pygame.Rect(x, c.y + px(330), hw, px(50))
+        self.btn_cancel.rect = pygame.Rect(x + hw + px(12), c.y + px(330), w - hw - px(12), px(50))
+
+    def buttons(self):
+        if self.waiting_room():
+            return [self.btn_copy, self.btn_cancel, self.btn_back]
+        return [self.btn_create, self.btn_join, self.btn_back]
+
+    # ---- vong lap
+    def handle(self, ev):
+        now = self.app.now
+        waiting = self.waiting_room()
+        if not waiting:
+            for f in (self.name_f, self.code_f):
+                if f.handle(ev, now):
+                    if f is self.code_f and f.focus and self.name_f.focus:
+                        self.name_f.focus = False
+                    if ev.type == pygame.MOUSEBUTTONDOWN:
+                        other = self.code_f if f is self.name_f else self.name_f
+                        if other.focus:
+                            other.focus = False
+                    return
+            if ev.type == pygame.MOUSEBUTTONDOWN and self.name_f.text.strip() != (self.net.name if self.net else ''):
+                self.commit_name()
+        for b in self.buttons():
+            if b.handle(ev, self.app):
+                return
+        if ev.type == pygame.KEYDOWN:
+            if ev.key == pygame.K_ESCAPE:
+                self.back()
+            elif waiting and ev.key == pygame.K_c and ev.mod & pygame.KMOD_CTRL:
+                self.copy_code()
+
+    @property
+    def typing(self):
+        return self.name_f.focus or self.code_f.focus
+
+    def update(self, dt):
+        mouse = pygame.mouse.get_pos()
+        bs = self.buttons()
+        for b in (self.btn_create, self.btn_join, self.btn_back, self.btn_copy, self.btn_cancel):
+            b.update(dt, mouse if b in bs else (-999, -999))
+        over_field = (not self.waiting_room()) and (self.name_f.rect.collidepoint(mouse) or self.code_f.rect.collidepoint(mouse))
+        self.want_hand = any(b.hovered for b in bs) or over_field
+
+    def draw(self, surf):
+        app, th, now = self.app, self.app.th, self.app.now
+        W, H = app.size
+        surf.blit(background(W, H, th), (0, 0))
+        app.floats.draw(surf, th, now)
+        c = self.card
+        draw_card(surf, c, px(26), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
+        pad = px(36)
+        # tieu de + trang thai ket noi
+        blit_center(surf, themed_piece('x', px(30), th, False), (c.x + pad + px(15), c.y + px(52)))
+        blit_center(surf, themed_piece('o', px(30), th, False), (c.x + pad + px(43), c.y + px(52)))
+        draw_text(surf, 'Chơi online', px(26), th['text'], (c.x + pad + px(68), c.y + px(52)), 'black', 'midleft')
+        st = self.net.status if self.net else 'idle'
+        label, col = {'online': ('Đã kết nối', (70, 200, 120)), 'connecting': ('Đang kết nối…', th['gold'])}.get(
+            st, ('Mất kết nối — đang thử lại', th['x']))
+        ts = text_surf(label, px(12), th['text'], 'semibold')
+        pr = pygame.Rect(0, 0, ts.get_width() + px(36), px(28))
+        pr.midright = (c.right - pad, c.y + px(52))
+        surf.blit(round_rect_surf(pr.w, pr.h, px(14), th['panel_alt'], th['border'], 1), pr.topleft)
+        a = 1.0 if st == 'online' else 0.45 + 0.55 * abs(math.sin(now * 3))
+        pygame.draw.circle(surf, lerp_color(th['panel_alt'], col, a), (pr.x + px(15), pr.centery), max(3, px(4)))
+        surf.blit(ts, ts.get_rect(midleft=(pr.x + px(25), pr.centery)))
+        draw_text(surf, 'Chơi cùng bạn bè qua mạng: một người tạo phòng, người kia nhập mã.', px(13),
+                  th['text_dim'], (c.x + pad, c.y + px(86)), 'regular', 'midleft')
+
+        room = self.waiting_room()
+        if room:
+            self.draw_waiting(surf, th, now, room)
+        else:
+            draw_spaced(surf, 'TÊN CỦA BẠN', px(11), th['text_dim'], self.lbl_name, 'bold')
+            self.name_f.draw(surf, th, now)
+            draw_spaced(surf, 'TẠO PHÒNG MỚI', px(11), th['text_dim'], self.lbl_create, 'bold')
+            r = self.r_create_info
+            surf.blit(round_rect_surf(r.w, r.h, px(12), th['panel_alt'], th['border'], 1), r.topleft)
+            sett = app.settings
+            info = f'Bàn {sett["size"]}×{sett["size"]}  ·  ' + ('Luật chặn 2 đầu' if sett['rule'] == 'block' else 'Luật tự do')
+            draw_text(surf, info, px(14), th['text'], (r.x + px(14), r.centery), 'semibold', 'midleft')
+            draw_text(surf, 'đổi ở menu', px(11), th['text_dim'], (r.right - px(12), r.centery), 'regular', 'midright')
+            draw_spaced(surf, 'VÀO PHÒNG CỦA BẠN BÈ', px(11), th['text_dim'], self.lbl_join, 'bold')
+            self.code_f.draw(surf, th, now, font_size=20, center=True)
+            err = self.net.error if self.net else None
+            if err:
+                draw_text(surf, err[1], px(13), th['x'], self.r_err.center, 'semibold', 'center')
+            elif st == 'offline':
+                draw_text(surf, 'Không kết nối được máy chủ. Kiểm tra mạng, game sẽ tự thử lại.', px(13),
+                          th['text_dim'], self.r_err.center, 'regular', 'center')
+        for b in self.buttons():
+            b.draw(surf, th)
+
+    def draw_waiting(self, surf, th, now, room):
+        c = self.card
+        pad = px(36)
+        draw_spaced(surf, 'MÃ PHÒNG', px(11), th['text_dim'], (c.x + pad, c.y + px(122)), 'bold')
+        code = room['code']
+        r = self.r_code
+        n = len(code)
+        g = px(10)
+        bw = (r.w - (n - 1) * g) // n
+        for i, ch in enumerate(code):
+            br = pygame.Rect(r.x + i * (bw + g), r.y, bw, r.h)
+            lift = int(abs(math.sin(now * 2 - i * 0.5)) * px(3))
+            surf.blit(round_rect_surf(br.w, br.h, px(14), th['panel_alt'], th['accent'], px(2)), (br.x, br.y - lift))
+            draw_text(surf, ch, px(40), th['accent'], (br.centerx, br.centery - lift), 'black', 'center')
+        sett = f'Bàn {room["size"]}×{room["size"]}  ·  ' + ('Luật chặn 2 đầu' if room['rule'] == 'block' else 'Luật tự do')
+        draw_text(surf, sett, px(14), th['text'], (c.centerx, c.y + px(262)), 'semibold', 'center')
+        ts = text_surf('Gửi mã này cho bạn bè — đang chờ đối thủ vào phòng', px(13), th['text_dim'], 'regular')
+        x0 = c.centerx - (ts.get_width() + px(26)) // 2
+        surf.blit(ts, ts.get_rect(midleft=(x0, c.y + px(292))))
+        for i in range(3):
+            dy = -abs(math.sin(now * 5 - i * 0.7)) * px(4)
+            pygame.draw.circle(surf, th['accent'], (x0 + ts.get_width() + px(8) + i * px(8), c.y + px(296) + dy), max(2, px(3)))
+        draw_text(surf, 'Bạn bè mở TDCaro → Chơi online → nhập mã → Vào phòng', px(12), th['text_dim'],
+                  (c.centerx, c.y + px(410)), 'regular', 'center')
 
 
 # ==================================== APP ===================================
@@ -1960,6 +2448,11 @@ def make_icon():
     return s
 
 
+def _wlog(stage):
+    if IS_WEB:
+        print(f'[tdcaro] {stage}', flush=True)
+
+
 class App:
     def __init__(self):
         _enable_dpi_awareness()
@@ -1973,36 +2466,49 @@ class App:
         w = int(min(sw * 0.82, sh * 0.85 * 1.6))
         h = int(w / 1.6)
         w, h = max(960, w), max(620, h)
-        try:
-            pygame.display.set_icon(make_icon())
-        except Exception:
-            pass
-        self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
-        pygame.display.set_caption('TDCaro')
-        _dark_title_bar()
-        try:
-            pygame.Window.from_display_module().minimum_size = (900, 600)
-        except Exception:
-            pass
+        if IS_WEB:
+            # web: canvas co dinh (trinh duyet tu co gian cho vua trang), khong dung API cua so
+            w, h = 1280, 800
+            _wlog('set_mode')
+            self.screen = pygame.display.set_mode((w, h))
+        else:
+            try:
+                pygame.display.set_icon(make_icon())
+            except Exception:
+                pass
+            self.screen = pygame.display.set_mode((w, h), pygame.RESIZABLE)
+            pygame.display.set_caption('TDCaro')
+            _dark_title_bar()
+            try:
+                pygame.Window.from_display_module().minimum_size = (900, 600)
+            except Exception:
+                pass
 
         self.settings = {'size': 15, 'theme': 'midnight', 'first': 'player', 'sound': True, 'music': True,
                          'level': 'normal', 'rule': 'block'}
         self.scores = {'player': 0, 'ai': 0, 'draw': 0}
         self.now = 0.0
         self.running = True
+        _wlog('sound')
         self.sound = SoundFX(self)
+        _wlog('music')
         self.music_ok = self._start_music()
+        _wlog('screens')
         self.updater = updater.Updater(APP_VERSION)
-        if not os.environ.get('CARO_NO_UPDATE'):
+        if not os.environ.get('CARO_NO_UPDATE') and not IS_WEB:
             self.updater.check_async()
         shortcuts.ensure_async(APP_VERSION)        # shortcut Desktop + Start Menu (lan dau / sau cap nhat)
         self.floats = FloatingSymbols()
         self.menu = MenuScreen(self)
         self.game = GameScreen(self)
+        self.net = None                  # online.OnlineClient (tao khi vao "Choi online")
+        self.lobby = LobbyScreen(self)
         self.state = 'menu'
         self.cursor_hand = None
         self.fullscreen = False
+        _wlog('on_resize')
         self.on_resize()
+        _wlog('init xong')
 
     # ---- properties / actions
     @property
@@ -2015,7 +2521,7 @@ class App:
 
     @property
     def current(self):
-        return self.menu if self.state == 'menu' else self.game
+        return {'menu': self.menu, 'game': self.game, 'lobby': self.lobby}[self.state]
 
     def on_resize(self):
         self.screen = pygame.display.get_surface()
@@ -2029,6 +2535,7 @@ class App:
         self.floats.reset(W, H)
         self.menu.layout()
         self.game.layout()
+        self.lobby.layout()
 
     def set_theme(self, key):
         self.settings['theme'] = key
@@ -2142,6 +2649,33 @@ class App:
         self.menu.layout()
         self.state = 'menu'
 
+    # ---- online
+    def go_online(self):
+        if self.net is None:
+            self.net = online.OnlineClient()
+        self.net.connect()
+        self.game.stop_online()
+        self.lobby.enter()
+        self.state = 'lobby'
+
+    def start_online_game(self, st):
+        self.game.start_online(st)
+        self.state = 'game'
+
+    def leave_online_game(self, already_left=False):
+        if self.net and not already_left:
+            self.net.leave()
+        self.game.stop_online()
+        self.lobby.enter()
+        self.state = 'lobby'
+
+    def leave_online_lobby(self):
+        if self.net:
+            if self.net.state:
+                self.net.leave()
+            self.net.disconnect()
+        self.go_menu()
+
     def quit(self):
         self.running = False
 
@@ -2159,6 +2693,8 @@ class App:
                 # load() bai moi cung ban ra MUSIC_END cua bai cu -> bo qua neu bai vua bat dau
                 if time.time() - getattr(self, '_track_t0', 0) > 1.0:
                     self.next_track()
+            elif self.state == 'lobby' and self.lobby.typing and ev.type in (pygame.KEYDOWN, pygame.TEXTINPUT):
+                self.lobby.handle(ev)            # dang go chu: khong de phim tat (K, F11...) an phim
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_k:
                 self.skip_track()
             elif ev.type == pygame.KEYDOWN and (ev.key == pygame.K_F11 or (
@@ -2168,6 +2704,13 @@ class App:
                 self.current.handle(ev)
         if self.updater.want_quit:
             self.running = False
+        if self.net:
+            msgs = self.net.poll()
+            if msgs:
+                if self.state == 'lobby':
+                    self.lobby.on_net(msgs)
+                elif self.state == 'game' and self.game.online:
+                    self.game.on_net(msgs)
         scr = self.current
         self.floats.update(dt)
         scr.update(dt)
@@ -2180,6 +2723,23 @@ class App:
                 pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND if want else pygame.SYSTEM_CURSOR_ARROW)
             except Exception:
                 pass
+
+    async def run_async(self):
+        """Vong lap cho ban web (pygbag): moi frame nhuong quyen cho trinh duyet."""
+        import asyncio
+        clock = pygame.time.Clock()
+        self._last_size = self.size
+        n = 0
+        while self.running:
+            dt = min(clock.tick(60) / 1000.0, 0.05)
+            if n < 2:
+                _wlog(f'frame {n}')
+            self.frame(pygame.event.get(), dt)
+            pygame.display.flip()
+            if n < 2:
+                _wlog(f'frame {n} xong')
+            n += 1
+            await asyncio.sleep(0)
 
     def run(self):
         clock = pygame.time.Clock()

@@ -10,12 +10,16 @@
 </p>
 
 <p align="center">
+  <a href="https://duydev1205.github.io/TDCaro/"><b>▶ Chơi ngay trên trình duyệt</b></a> ·
   <a href="https://github.com/DuyDev1205/TDCaro/releases/latest"><b>⬇ Tải bản mới nhất (Windows .exe / macOS .dmg)</b></a>
 </p>
 
 ---
 
 ## Tính năng
+
+- **Chơi online 1 vs 1**: một người tạo phòng (mã 6 ký tự), người kia nhập mã để vào — chơi được giữa bản máy tính và bản web
+- **Bản web**: chơi ngay trên trình duyệt, không cần cài đặt (GitHub Pages)
 
 - **Luật chơi**: *Chặn 2 đầu* (mặc định — dãy 5 bị quân đối thủ chặn cả hai đầu không thắng, mép bàn không tính là chặn) hoặc *Tự do*; AI mức Bình thường/Khó/Cực khó hiểu luật này
 - **4 mức độ AI**: Dễ · Bình thường · Khó · Cực khó (xem chi tiết bên dưới)
@@ -99,9 +103,24 @@ Soạn lại nhạc nền (cần thêm `pip install numpy soundfile`, chỉ cho 
 
 ## Build
 
-- **Windows:** chạy `packaginguild_exe.bat` → `dist/TDCaro.exe`
+- **Windows:** chạy `packaging\build_exe.bat` → `dist/TDCaro.exe`
 - **macOS:** `pyinstaller packaging/TDCaro_mac.spec` → `dist/TDCaro.app`
-- **Tự động:** push một tag dạng `v1.2.3` → GitHub Actions build `.exe` + `.dmg` và đăng lên Releases.
+- **Web:** `pip install pygbag` rồi `python tools/build_web.py` → `build/web_app/build/web/` (thêm `--serve` để chạy thử ở http://localhost:8000)
+- **Tự động:** push một tag dạng `v1.2.3` → GitHub Actions build `.exe` + `.dmg` đăng lên Releases, và build bản web đăng lên GitHub Pages.
+
+## Chơi online
+
+| Phần | Chi tiết |
+|---|---|
+| Server | [`server/server.js`](server/server.js) — Node.js + `ws`, giữ trạng thái ván (chống gian lận), kiểm tra lượt, luật chặn 2 đầu / tự do |
+| Địa chỉ | `wss://vlxd.tail24e2ba.ts.net:10000` (VPS `vlxd`, thư mục `~/_gitclone/tdcaro`, dịch vụ `tdcaro.service`) |
+| Client | [`src/online.py`](src/online.py) — máy tính dùng `websocket-client`, web dùng WebSocket của trình duyệt |
+| Rớt mạng | Tự kết nối lại và về đúng phòng; quá 60 giây không quay lại thì xử thua |
+| Chơi lại | Cả 2 bấm *Chơi lại* → ván mới, đổi người đi trước |
+
+- Đổi server: biến môi trường `TDCARO_SERVER=wss://...` (máy tính) hoặc thêm `?server=wss://...` vào link (web).
+- Chạy server ở máy: `cd server && npm install && npm start` (cổng 8388) · kiểm thử: `npm test`
+- Cập nhật server trên VPS: `ssh vlxd 'sh ~/_gitclone/tdcaro/server/deploy.sh'`
 
 ## Cấu trúc
 
@@ -110,10 +129,16 @@ src/
   Finals.py           Giao diện pygame-ce + AI gốc (mức Dễ) — chạy file này
   ai_engine_v2.py     AI nâng cao (Bình thường / Khó / Cực khó)
   updater.py          Tự động cập nhật qua GitHub Releases
-assets/               Icon (.ico / .png)
+  online.py           Kết nối chơi online
+  shortcuts.py        Tạo shortcut Desktop / Start Menu (Windows)
+server/               Server phòng chơi online (Node.js + WebSocket) + test + systemd
+web/                  Điểm vào + mẫu trang cho bản web (pygbag)
+assets/               Icon, nhạc nền, phông chữ Be Vietnam Pro (OFL)
 packaging/            Cấu hình PyInstaller (Windows / macOS) + build_exe.bat
 tools/
   benchmark.py        Cho các mức AI đấu nhau
   set_version.py      Ghi số phiên bản (dùng trong CI)
-.github/workflows/    CI build & release (.exe + .dmg)
+  build_web.py        Build bản web
+  make_music.py       Soạn nhạc nền
+.github/workflows/    CI build & release (.exe + .dmg) và bản web (GitHub Pages)
 ```
