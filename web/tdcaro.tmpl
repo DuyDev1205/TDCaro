@@ -222,7 +222,10 @@ function show_infobox() {
         div.emscripten_border { border: 1px solid black; }
         div.thick_border { border: 4px solid black; }
 
-        /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
+        /* TDCaro: canvas phu kin ca cua so trinh duyet (game tu ve theo kich thuoc that) */
+        #canvas.emscripten { width: 100vw !important; height: 100vh !important; left: 0 !important; top: 0 !important; margin: 0 !important; }
+        html, body { overflow: hidden; }
+                /* the canvas *must not* have any border or padding, or mouse coords will be wrong */
         /* average size of droid screen 470dp x 320dp  */
         canvas.emscripten {
             border: 0px none;
@@ -298,6 +301,27 @@ function show_infobox() {
     // TDCaro: WebSocket nhi phan cho che do choi online (MQTT qua broker cong cong).
     // Python goi qua platform.window.tdSock; du lieu nhi phan truyen dang base64.
     // TDCaro: nhac nen do trinh duyet phat (<audio> chay luong rieng -> khong giat khi Python dang tinh)
+    // TDCaro: toan man hinh cua trinh duyet (nut "Toan man hinh" trong game + lan bam dau tien)
+    window.tdFull = {
+        toggle() {
+            const d = document, el = d.documentElement;
+            try {
+                if (!(d.fullscreenElement || d.webkitFullscreenElement)) {
+                    const r = (el.requestFullscreen || el.webkitRequestFullscreen || (() => null)).call(el);
+                    if (r && r.catch) r.catch(() => {});
+                } else {
+                    const r = (d.exitFullscreen || d.webkitExitFullscreen || (() => null)).call(d);
+                    if (r && r.catch) r.catch(() => {});
+                }
+            } catch (e) {}
+            return true;
+        },
+        isOn() { return !!(document.fullscreenElement || document.webkitFullscreenElement); },
+    };
+    document.addEventListener("pointerdown", function tdFirst() {
+        document.removeEventListener("pointerdown", tdFirst, true);
+        if (!window.tdFull.isOn()) window.tdFull.toggle();
+    }, true);
     window.tdMusic = (() => {
         const a = new Audio(); a.preload = "auto"; let ended = false;
         a.addEventListener("ended", () => { ended = true; });

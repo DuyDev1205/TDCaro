@@ -20,6 +20,9 @@ os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
 import pygame
 
 IS_WEB = sys.platform == 'emscripten'      # ban web (pygbag / WebAssembly)
+# Ban web: phan TINH (nen, the, ban co, tieu de...) duoc chup san thanh 1 lop nen, moi khung hinh chi ve phan
+# thay doi -> nhanh hon nhieu (WebAssembly ve anh trong suot cham). Ban may tinh giu nguyen (con hieu ung chu dong).
+BAKE = IS_WEB or os.environ.get('TDCARO_BAKE') == '1'
 
 
 # ==========================================
@@ -599,6 +602,15 @@ def background(w, h, th):
     return cached(key, make)
 
 
+def static_layer(key, size, paint):
+    """Lop nen tinh (chi dung khi BAKE): ve 1 lan bang paint(surface), dung lai cho toi khi key doi."""
+    def make():
+        s = pygame.Surface(size, 0, 32)
+        paint(s)
+        return s
+    return cached(key, make)
+
+
 def thick_line(s, color, p1, p2, w):
     dx, dy = p2[0] - p1[0], p2[1] - p1[1]
     L = math.hypot(dx, dy) or 1.0
@@ -934,6 +946,12 @@ class Confetti:
 
 # ================================ MENU SCREEN ===============================
 
+def _title_shadow(title, th):
+    sh = title.copy()
+    sh.fill((0, 0, 0, 70 if not th['dark'] else 140), special_flags=pygame.BLEND_RGBA_MULT)
+    return sh
+
+
 class MenuScreen:
     PRESETS = [9, 13, 15, 19, 20]
 
@@ -1187,20 +1205,15 @@ class MenuScreen:
         self.size_pulse = approach(self.size_pulse, 0.0, dt, 8)
         self.want_hand = any(b.hovered for b in self.buttons)
 
-    def draw(self, surf):
-        app, th, now = self.app, self.app.th, self.app.now
+    def draw_static(self, surf, th, now):
+        """Phan khong doi cua menu (nen, tieu de, the cai dat, nhan, chu thich phim)."""
+        app = self.app
         W, H = app.size
         surf.blit(background(W, H, th), (0, 0))
         app.floats.draw(surf, th, now)
-
-        # ----- left hero column
         x = self.lx
-        bob = math.sin(now * 2.2) * px(5)
-        blit_center(surf, themed_piece('x', px(68), th), (x + px(36), self.logo_y + bob))
-        blit_center(surf, themed_piece('o', px(68), th), (x + px(36) + px(80), self.logo_y - bob))
         title = gradient_text('TDCaro', px(108), 'black', th['x'], th['o'])
-        sh = title.copy()
-        sh.fill((0, 0, 0, 70 if not th['dark'] else 140), special_flags=pygame.BLEND_RGBA_MULT)
+        sh = cached(('title_sh', title.get_size(), th['key']), lambda: _title_shadow(title, th))
         surf.blit(sh, (x + px(2), self.title_y + px(6)))
         surf.blit(title, (x - px(2), self.title_y))
         draw_spaced(surf, 'AI CHALLENGE  ·  GOMOKU', px(20), th['bg_accent'], (x, self.sub_y), 'bold', px(4))
@@ -1208,6 +1221,33 @@ class MenuScreen:
                   px(16), th['bg_text_dim'], (x, self.desc_y))
         draw_text(surf, 'để giành chiến thắng trước trí tuệ nhân tạo.',
                   px(16), th['bg_text_dim'], (x, self.desc_y + px(24)))
+        draw_card(surf, self.card, px(24), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
+        draw_spaced(surf, 'KÍCH THƯỚC BÀN CỜ', px(12), th['text_dim'], self.lbl_size, 'bold')
+        sr = self.size_rect
+        surf.blit(round_rect_surf(sr.w, sr.h, px(14), th['panel_alt'], th['border'], 1), sr)
+        draw_spaced(surf, 'ĐỘ KHÓ', px(12), th['text_dim'], self.lbl_level, 'bold')
+        draw_spaced(surf, 'NGƯỜI ĐI TRƯỚC', px(12), th['text_dim'], self.lbl_first, 'bold')
+        draw_spaced(surf, 'LUẬT CHƠI', px(12), th['text_dim'], self.lbl_rule, 'bold')
+        self.draw_rule_info(surf, th, app.settings['rule'] == 'block')
+        draw_spaced(surf, 'GIAO DIỆN', px(12), th['text_dim'], self.lbl_theme, 'bold')
+        draw_text(surf, 'Space: bắt đầu  ·  Mũi tên: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
+                  px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
+        draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
+
+    def draw(self, surf):
+        app, th, now = self.app, self.app.th, self.app.now
+        W, H = app.size
+        if BAKE:
+            key = ('menu_static', W, H, th['key'], app.settings['rule'], tuple(self.card), self.lx)
+            surf.blit(static_layer(key, (W, H), lambda s: self.draw_static(s, th, 0.0)), (0, 0))
+        else:
+            self.draw_static(surf, th, now)
+
+        # ----- left hero column
+        x = self.lx
+        bob = math.sin(now * 2.2) * px(5)
+        blit_center(surf, themed_piece('x', px(68), th), (x + px(36), self.logo_y + bob))
+        blit_center(surf, themed_piece('o', px(68), th), (x + px(36) + px(80), self.logo_y - bob))
 
         # score pill
         parts, gaps, pr = self.score_pill(th)
@@ -1221,27 +1261,15 @@ class MenuScreen:
         for b in (self.btn_start, self.btn_online, self.btn_quit, self.btn_sound):
             b.draw(surf, th)
 
-        # ----- settings card
-        draw_card(surf, self.card, px(24), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
-        draw_spaced(surf, 'KÍCH THƯỚC BÀN CỜ', px(12), th['text_dim'], self.lbl_size, 'bold')
+        # ----- settings card (phan dong)
         sr = self.size_rect
-        surf.blit(round_rect_surf(sr.w, sr.h, px(14), th['panel_alt'], th['border'], 1), sr)
         n = app.settings['size']
         fs = px(28) + int(px(6) * self.size_pulse)
         draw_text(surf, f'{n} × {n}', fs, th['accent'], sr.center, 'black', 'center')
-        draw_spaced(surf, 'ĐỘ KHÓ', px(12), th['text_dim'], self.lbl_level, 'bold')
-        draw_spaced(surf, 'NGƯỜI ĐI TRƯỚC', px(12), th['text_dim'], self.lbl_first, 'bold')
-        draw_spaced(surf, 'LUẬT CHƠI', px(12), th['text_dim'], self.lbl_rule, 'bold')
-        self.draw_rule_info(surf, th, app.settings['rule'] == 'block')
-        draw_spaced(surf, 'GIAO DIỆN', px(12), th['text_dim'], self.lbl_theme, 'bold')
         for b in ([self.btn_minus, self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips +
                   self.level_chips + self.rule_chips + self.swatches):
             b.draw(surf, th)
 
-        # footer
-        draw_text(surf, 'Space: bắt đầu  ·  Mũi tên: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
-                  px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
-        draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
         self.btn_full.draw(surf, th)
         self.btn_music.draw(surf, th)
         self.btn_next.draw(surf, th)
@@ -1776,17 +1804,21 @@ class GameScreen:
             return s
         return cached(key, make)
 
-    def draw_board(self, surf, th, now):
+    def draw_board_static(self, surf, th):
         slab, cell = self.slab, self.cell
         sh, pad = shadow_surf(slab.w, slab.h + self.depth, px(18), px(26), th['shadow_alpha'])
         surf.blit(sh, (slab.x - pad, slab.y - pad + px(14)))
         surf.blit(self.board_surface(th), slab.topleft)
-
         fs = int(clamp(cell * 0.3, px(10), px(15)))
         for i in range(self.N):
             cx, cy = self.cell_center(i, i)
             draw_text(surf, COL_LETTERS[i], fs, th['bg_text_dim'], (cx, slab.y - px(14)), 'bold', 'center')
             draw_text(surf, str(i + 1), fs, th['bg_text_dim'], (slab.x - px(16), cy), 'bold', 'center')
+
+    def draw_board(self, surf, th, now):
+        slab, cell = self.slab, self.cell
+        if not BAKE:
+            self.draw_board_static(surf, th)
 
         gap = max(1, round(cell * 0.05))
         tsz = cell - 2 * gap
@@ -1896,9 +1928,13 @@ class GameScreen:
             surf.blit(round_rect_surf(tr.w, tr.h, px(9), color), tr)
             surf.blit(ts, ts.get_rect(center=tr.center))
 
+    def draw_panel_static(self, surf, th):
+        draw_card(surf, self.panel, px(24), th['panel'], th['border'], 1, (px(30), th['shadow_alpha'], px(12)))
+
     def draw_panel(self, surf, th, now):
         p = self.panel
-        draw_card(surf, p, px(24), th['panel'], th['border'], 1, (px(30), th['shadow_alpha'], px(12)))
+        if not BAKE:
+            self.draw_panel_static(surf, th)
         # header
         r = self.r_header
         blit_center(surf, themed_piece('x', px(26), th, False), (r.x + px(13), r.centery))
@@ -2080,8 +2116,18 @@ class GameScreen:
     def draw(self, surf):
         app, th, now = self.app, self.app.th, self.app.now
         W, H = app.size
-        surf.blit(background(W, H, th), (0, 0))
-        app.floats.draw(surf, th, now)
+        if BAKE:
+            key = ('game_static', W, H, th['key'], self.N, self.cell, tuple(self.slab), tuple(self.panel))
+
+            def paint(s):
+                s.blit(background(W, H, th), (0, 0))
+                app.floats.draw(s, th, 0.0)
+                self.draw_board_static(s, th)
+                self.draw_panel_static(s, th)
+            surf.blit(static_layer(key, (W, H), paint), (0, 0))
+        else:
+            surf.blit(background(W, H, th), (0, 0))
+            app.floats.draw(surf, th, now)
         self.draw_board(surf, th, now)
         self.draw_panel(surf, th, now)
         self.draw_overlays(surf, th, now)
@@ -2100,10 +2146,14 @@ class TextField:
         self.on_enter = on_enter
         self.text = ''
         self.focus = False
+        self.sel_all = False            # Ctrl+A: dang chon het chu
         self.rect = pygame.Rect(0, 0, 0, 0)
         self.t_focus = 0.0
 
     def _accept(self, s):
+        if self.sel_all:
+            self.text = ''
+            self.sel_all = False
         if self.upper:
             s = s.upper()
         if self.allowed is not None:
@@ -2115,6 +2165,7 @@ class TextField:
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
             was = self.focus
             self.focus = self.rect.collidepoint(ev.pos)
+            self.sel_all = False
             if self.focus and not was:
                 self.t_focus = now
             return self.focus
@@ -2124,8 +2175,26 @@ class TextField:
             self._accept(ev.text)
             return True
         if ev.type == pygame.KEYDOWN:
-            if ev.key == pygame.K_BACKSPACE:
-                self.text = self.text[:-1]
+            ctrl = ev.mod & (pygame.KMOD_CTRL | pygame.KMOD_META)
+            if ev.key == pygame.K_a and ctrl:
+                self.sel_all = bool(self.text)
+                return True
+            if ev.key == pygame.K_c and ctrl:
+                try:
+                    pygame.scrap.put_text(self.text)
+                except Exception:
+                    pass
+                return True
+            if ev.key in (pygame.K_BACKSPACE, pygame.K_DELETE):
+                if self.sel_all:
+                    self.text = ''
+                elif ctrl:                          # xoa ca tu
+                    self.text = self.text.rstrip()
+                    cut = self.text.rfind(' ')
+                    self.text = self.text[:cut + 1] if cut >= 0 else ''
+                elif ev.key == pygame.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                self.sel_all = False
             elif ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 if self.on_enter:
                     self.on_enter()
@@ -2136,6 +2205,9 @@ class TextField:
                     pass
             elif ev.key == pygame.K_ESCAPE:
                 self.focus = False
+            elif ev.key not in (pygame.K_LCTRL, pygame.K_RCTRL, pygame.K_LSHIFT, pygame.K_RSHIFT,
+                                pygame.K_LMETA, pygame.K_RMETA, pygame.K_LALT, pygame.K_RALT):
+                self.sel_all = False
             return True       # khi dang go, khong de phim tat khac an phim
         return False
 
@@ -2150,8 +2222,11 @@ class TextField:
             tr = ts.get_rect(center=r.center)
         else:
             tr = ts.get_rect(midleft=(r.x + px(14), r.centery))
+        if self.sel_all and txt and self.focus:        # Ctrl+A: to nen vung chon
+            hl = tr.inflate(px(6), px(2))
+            surf.blit(round_rect_surf(hl.w, hl.h, px(5), (*th['accent'], 110)), hl.topleft)
         surf.blit(ts, tr)
-        if self.focus and int((now - self.t_focus) * 2) % 2 == 0:
+        if self.focus and not self.sel_all and int((now - self.t_focus) * 2) % 2 == 0:
             cx = (tr.right + px(2)) if txt else (tr.x if not center else r.centerx)
             pygame.draw.line(surf, th['accent'], (cx, r.centery - px(11)), (cx, r.centery + px(11)), max(2, px(2)))
 
@@ -2309,6 +2384,13 @@ class LobbyScreen:
         return self.name_f.focus or self.code_f.focus
 
     def update(self, dt):
+        typing = self.typing
+        if typing != getattr(self, '_repeat_on', False):     # giu Backspace -> xoa lien tuc
+            self._repeat_on = typing
+            try:
+                pygame.key.set_repeat(400, 35) if typing else pygame.key.set_repeat()
+            except Exception:
+                pass
         mouse = pygame.mouse.get_pos()
         bs = self.buttons()
         for b in (self.btn_create, self.btn_join, self.btn_back, self.btn_copy, self.btn_cancel):
@@ -2319,10 +2401,16 @@ class LobbyScreen:
     def draw(self, surf):
         app, th, now = self.app, self.app.th, self.app.now
         W, H = app.size
-        surf.blit(background(W, H, th), (0, 0))
-        app.floats.draw(surf, th, now)
         c = self.card
-        draw_card(surf, c, px(26), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
+
+        def paint(s, t):
+            s.blit(background(W, H, th), (0, 0))
+            app.floats.draw(s, th, t)
+            draw_card(s, c, px(26), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
+        if BAKE:
+            surf.blit(static_layer(('lobby_static', W, H, th['key'], tuple(c)), (W, H), lambda s: paint(s, 0.0)), (0, 0))
+        else:
+            paint(surf, now)
         pad = px(36)
         # tieu de + trang thai ket noi
         blit_center(surf, themed_piece('x', px(30), th, False), (c.x + pad + px(15), c.y + px(52)))
@@ -2450,20 +2538,30 @@ def make_icon():
 
 
 def _web_canvas_size():
-    """Khung 16:10 lon nhat vua cua so trinh duyet, nhan devicePixelRatio (toi da 2560 px ngang)."""
+    """Canvas lap day ca cua so trinh duyet, nhan devicePixelRatio cho net (toi da ~2560x1600 diem anh)."""
     try:
         import platform as _pf
         win = _pf.window
         dpr = float(win.devicePixelRatio or 1)
-        vw, vh = float(win.innerWidth), float(win.innerHeight)
-        fw = min(vw, vh * 1.6)
-        w = fw * dpr
-        if w > 2560:
-            w = 2560
-        w = max(960, int(w))
-        return w, int(w / 1.6)
+        w, h = float(win.innerWidth) * dpr, float(win.innerHeight) * dpr
+        k = min(1.0, 2560 / max(w, 1), 1600 / max(h, 1))      # gioi han de van muot
+        return max(320, int(w * k)), max(240, int(h * k))
     except Exception:
         return 1280, 800
+
+
+WEB_FPS = 60
+
+
+def _web_flag(name):
+    """Tham so link tren web, vd ?perf=1"""
+    if not IS_WEB:
+        return False
+    try:
+        import platform as _pf
+        return f'{name}=1' in str(_pf.window.location.search)
+    except Exception:
+        return False
 
 
 def _wlog(stage):
@@ -2569,6 +2667,14 @@ class App:
 
     def toggle_fullscreen(self):
         """Chuyen qua lai giua cua so va toan man hinh (borderless, khong doi do phan giai)."""
+        if IS_WEB:
+            # trinh duyet: Fullscreen API (kich thuoc canvas tu cap nhat o _web_poll_size)
+            try:
+                import platform as _pf
+                _pf.window.tdFull.toggle()
+            except Exception:
+                pass
+            return
         target = not self.fullscreen
         try:
             win = pygame.Window.from_display_module()
@@ -2720,6 +2826,29 @@ class App:
     def quit(self):
         self.running = False
 
+    def _web_poll_size(self):
+        """Web: cua so trinh duyet doi kich thuoc / vao-ra toan man hinh -> ve lai dung kich thuoc moi."""
+        t = time.time()
+        if t - getattr(self, '_size_t', 0) < 0.4:
+            return
+        self._size_t = t
+        try:
+            import platform as _pf
+            self.fullscreen = bool(_pf.window.tdFull.isOn())
+        except Exception:
+            pass
+        w, h = _web_canvas_size()
+        cw, ch = self.size
+        if abs(w - cw) > 2 or abs(h - ch) > 2:
+            pygame.display.set_mode((w, h))
+            self.on_resize()
+            self._last_size = self.size
+
+    def perf_detail(self):
+        pf = getattr(self, '_perf', {}) or {}
+        n = max(1, pf.get('n', 1))
+        return ' '.join(f'{k} {v / n * 1000:.1f}ms' for k, v in pf.items() if k != 'n')
+
     def shutdown_net(self):
         """Thoat game khi dang online: bao cho doi thu (chu phong dong phong / khach roi phong)."""
         if self.net:
@@ -2754,6 +2883,11 @@ class App:
                 self.current.handle(ev)
         if self.updater.want_quit:
             self.running = False
+        if self.state != 'lobby' and getattr(self.lobby, '_repeat_on', False):
+            self.lobby._repeat_on = False        # roi sanh khi dang go -> tat lap phim
+            pygame.key.set_repeat()
+        if IS_WEB:
+            self._web_poll_size()
         if IS_WEB and self.music_ok:
             try:
                 if self._web_music.ended():         # het bai (trinh duyet bao) -> bai tiep
@@ -2770,8 +2904,15 @@ class App:
         scr = self.current
         self.floats.update(dt)
         scr.update(dt)
+        t0 = time.perf_counter()
         scr.draw(self.canvas)
+        t1 = time.perf_counter()
         self.screen.blit(self.canvas, (0, 0))
+        t2 = time.perf_counter()
+        pf = self.__dict__.setdefault('_perf', {})
+        pf['draw'] = pf.get('draw', 0.0) + (t1 - t0)
+        pf['canvas->screen'] = pf.get('canvas->screen', 0.0) + (t2 - t1)
+        pf['n'] = pf.get('n', 0) + 1
         want = scr.want_hand
         if want != self.cursor_hand:
             self.cursor_hand = want
@@ -2786,15 +2927,29 @@ class App:
         clock = pygame.time.Clock()
         self._last_size = self.size
         n = 0
+        perf = _web_flag('perf')
+        acc = [0.0, 0.0, 0.0, 0]
         while self.running:
-            dt = min(clock.tick(60) / 1000.0, 0.05)
+            dt = min(clock.tick(WEB_FPS) / 1000.0, 0.05)
             if n < 2:
                 _wlog(f'frame {n}')
+            t0 = time.perf_counter()
             self.frame(pygame.event.get(), dt)
+            t1 = time.perf_counter()
             pygame.display.flip()
+            t2 = time.perf_counter()
             if n < 2:
                 _wlog(f'frame {n} xong')
             n += 1
+            if perf:
+                acc[0] += t1 - t0; acc[1] += t2 - t1; acc[3] += 1
+                acc[2] += dt
+                if acc[3] >= 120:
+                    k = acc[3]
+                    _wlog(f'perf {self.state} {self.size[0]}x{self.size[1]}: ve {acc[0]/k*1000:.1f}ms '
+                          f'flip {acc[1]/k*1000:.1f}ms fps {k/acc[2]:.0f} | {self.perf_detail()}')
+                    acc = [0.0, 0.0, 0.0, 0]
+                    self._perf = {}
             await asyncio.sleep(0)
         self.shutdown_net()
 
