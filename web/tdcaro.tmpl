@@ -322,6 +322,36 @@ function show_infobox() {
         document.removeEventListener("pointerdown", tdFirst, true);
         if (!window.tdFull.isOn()) window.tdFull.toggle();
     }, true);
+    // TDCaro: tieng hieu ung do Web Audio phat (luong am thanh rieng, khong bi anh huong khi Python dang tinh)
+    window.tdSfx = (() => {
+        let ctx = null; const bufs = {};
+        const ac = () => {
+            if (!ctx) { const C = window.AudioContext || window.webkitAudioContext; ctx = new C(); }
+            return ctx;
+        };
+        return {
+            load(name, b64) {
+                try {
+                    const bin = atob(b64), u = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+                    ac().decodeAudioData(u.buffer).then((b) => { bufs[name] = b; }).catch(() => {});
+                } catch (e) {}
+                return true;
+            },
+            info() { return { state: ctx ? ctx.state : "none", t: ctx ? ctx.currentTime : 0, decoded: Object.keys(bufs).length, played: window.__tdPlayed || 0 }; },
+            play(name, vol) {
+                window.__tdPlayed = (window.__tdPlayed || 0) + 1;
+                try {
+                    const c = ac(), b = bufs[name];
+                    if (c.state === "suspended") c.resume();
+                    if (!b) return false;
+                    const src = c.createBufferSource(), g = c.createGain();
+                    src.buffer = b; g.gain.value = vol; src.connect(g); g.connect(c.destination); src.start();
+                } catch (e) {}
+                return true;
+            },
+        };
+    })();
     window.tdMusic = (() => {
         const a = new Audio(); a.preload = "auto"; let ended = false;
         a.addEventListener("ended", () => { ended = true; });

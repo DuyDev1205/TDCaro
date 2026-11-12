@@ -705,12 +705,28 @@ def blit_center(surf, spr, pos):
 
 # ------------------------------------ SOUND --------------------------------
 
+SFX_SPECS = {
+    'click': ([(1250, 0.035)], 0.12, 70),
+    'place': ([(880, 0.10)], 0.30, 32),
+    'ai': ([(587, 0.10)], 0.28, 32),
+    'hint': ([(988, 0.08), (1319, 0.12)], 0.18, 18),
+    'win': ([(523, 0.11), (659, 0.11), (784, 0.11), (1047, 0.38)], 0.26, 7),
+    'lose': ([(440, 0.16), (370, 0.16), (294, 0.40)], 0.26, 6),
+    'draw': ([(587, 0.14), (587, 0.26)], 0.22, 8),
+}
+
+
 class SoundFX:
-    """Am thanh tong hop bang code -> khong can file ngoai khi build exe."""
+    """Am thanh tong hop bang code -> khong can file ngoai khi build exe.
+    Ban web: tieng do trinh duyet phat (Web Audio, luong am thanh rieng) -> khong re/giat khi AI dang tinh."""
 
     def __init__(self, app):
         self.app = app
         self.sounds = {}
+        self.web = None
+        if IS_WEB:
+            self._init_web()
+            return
         try:
             init = pygame.mixer.get_init()
             if not init:
@@ -718,19 +734,33 @@ class SoundFX:
             self.rate, fmt, self.ch = init
             if fmt != -16:
                 return
-            self.sounds = {
-                'click': self._tone([(1250, 0.035)], 0.12, 70),
-                'place': self._tone([(880, 0.10)], 0.30, 32),
-                'ai': self._tone([(587, 0.10)], 0.28, 32),
-                'hint': self._tone([(988, 0.08), (1319, 0.12)], 0.18, 18),
-                'win': self._tone([(523, 0.11), (659, 0.11), (784, 0.11), (1047, 0.38)], 0.26, 7),
-                'lose': self._tone([(440, 0.16), (370, 0.16), (294, 0.40)], 0.26, 6),
-                'draw': self._tone([(587, 0.14), (587, 0.26)], 0.22, 8),
-            }
+            self.sounds = {k: self._tone(*spec) for k, spec in SFX_SPECS.items()}
         except Exception:
             self.sounds = {}
 
+    def _init_web(self):
+        """Tao WAV cho tung tieng roi giao cho trinh duyet (window.tdSfx) giai ma san."""
+        try:
+            import base64
+            import struct
+            import platform as _pf
+            self.web = _pf.window.tdSfx
+            self.rate, self.ch = 22050, 1
+            for name, (notes, vol, decay) in SFX_SPECS.items():
+                pcm = self._pcm(notes, vol, decay).tobytes()
+                wav = (b'RIFF' + struct.pack('<I', 36 + len(pcm)) + b'WAVEfmt ' +
+                       struct.pack('<IHHIIHH', 16, 1, 1, self.rate, self.rate * 2, 2, 16) +
+                       b'data' + struct.pack('<I', len(pcm)) + pcm)
+                self.web.load(name, base64.b64encode(wav).decode('ascii'))
+                self.sounds[name] = True
+        except Exception:
+            self.web = None
+            self.sounds = {}
+
     def _tone(self, notes, vol, decay):
+        return pygame.mixer.Sound(buffer=self._pcm(notes, vol, decay).tobytes())
+
+    def _pcm(self, notes, vol, decay):
         buf = array('h')
         rate = self.rate
         for f, d in notes:
@@ -742,12 +772,15 @@ class SoundFX:
                 sample = int(clamp(v, -1.0, 1.0) * 32767)
                 for _ in range(self.ch):
                     buf.append(sample)
-        return pygame.mixer.Sound(buffer=buf.tobytes())
+        return buf
 
     def play(self, name):
         if self.app.settings['sound'] and name in self.sounds:
             try:
-                self.sounds[name].play()
+                if self.web is not None:
+                    self.web.play(name, 1.0)
+                else:
+                    self.sounds[name].play()
             except Exception:
                 pass
 
@@ -2577,7 +2610,12 @@ class App:
             pygame.mixer.pre_init(44100, -16, 2, 2048 if IS_WEB else 512)
         except Exception:
             pass
-        pygame.init()
+        if IS_WEB:
+            # web: khong khoi tao mixer SDL -> khong con tieng re khi luong chinh ban (AI dang tinh)
+            pygame.display.init()
+            pygame.font.init()
+        else:
+            pygame.init()
         info = pygame.display.Info()
         sw, sh = info.current_w or 1366, info.current_h or 768
         w = int(min(sw * 0.82, sh * 0.85 * 1.6))

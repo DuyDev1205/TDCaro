@@ -10,6 +10,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Sửa lỗi web:** âm thanh không còn rè/giật khi máy đang suy nghĩ (tiếng hiệu ứng do trình duyệt phát bằng Web Audio)
 - **Web:** mặc định lấp kín cửa sổ và vào toàn màn hình; nút *Toàn màn hình* hoạt động; chạy mượt hơn nhiều (~60 khung hình/giây, trước ~25)
 - **Ô nhập tên / mã phòng:** giữ Backspace để xoá liên tục, `Ctrl+A` chọn hết, `Ctrl+Backspace` xoá cả từ
 - **Sửa lỗi web:** nhạc nền không còn giật/rè khi AI đang suy nghĩ (trình duyệt tự phát nhạc); trang web tải nhanh hơn (gói game 4 MB → 0,7 MB)
