@@ -1735,10 +1735,15 @@ class GameScreen:
         for b in self.modal_buttons:
             b.update(dt, mouse if modal_on else (-999, -999))
 
-        # web: chay viec AI dang cho SAU KHI hieu ung dat quan (0.3s) da xong -> quan X khong bi dung hinh
+        # web: chi chay viec AI khi hieu ung dat quan DA VE XONG (self.anim rong = quan da hien du co),
+        # khong phu thuoc may nhanh/cham; toi da cho 1.5s de khong bao gio ket.
+        # (doi them 3 khung hinh sau khi quan da du co -> trinh duyet chac chan da hien thi khung hinh do)
+        self._settle = 0 if self.anim else getattr(self, '_settle', 0) + 1
         for j in (self.ai_job, self.hint_job):
-            if j and 'work' in j and time.perf_counter() - j['t0'] > 0.34:
-                j.pop('work')()
+            if j and 'work' in j:
+                waited = time.perf_counter() - j['t0']
+                if (self._settle >= 3 and waited > 0.08) or waited > 1.5:
+                    j.pop('work')()
         # ket qua AI
         job = self.ai_job
         if job and job['done'] and time.perf_counter() - job['t0'] >= AI_MIN_THINK:

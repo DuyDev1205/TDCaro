@@ -44,6 +44,17 @@ def main():
     for extra in ('web_app.apk',):            # GitHub Pages chi can .tar.gz (.apk danh cho itch.io)
         if os.path.exists(os.path.join(out, extra)):
             os.remove(os.path.join(out, extra))
+    # ten goi game kem phien ban -> trinh duyet khong dung nham ban cu trong bo nho dem
+    import re
+    src = open(os.path.join(ROOT, 'src', 'Finals.py'), encoding='utf-8').read()
+    ver = re.search(r"^APP_VERSION = '([^']+)'", src, re.M).group(1)
+    stamp = f'{ver}-{int(os.path.getmtime(os.path.join(APP, "src", "Finals.py")))}'
+    new_name = f'web_app-{stamp}.tar.gz'
+    os.replace(os.path.join(out, 'web_app.tar.gz'), os.path.join(out, new_name))
+    idx = os.path.join(out, 'index.html')
+    html = open(idx, encoding='utf-8').read()
+    assert 'web_app.tar.gz' in html
+    open(idx, 'w', encoding='utf-8').write(html.replace('web_app.tar.gz', new_name))
     print('\nBan web:', out)
     for f in sorted(os.listdir(out)):
         print(f'  {f:<24} {os.path.getsize(os.path.join(out, f)) / 1e6:6.2f} MB')
