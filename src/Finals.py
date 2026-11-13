@@ -494,7 +494,8 @@ def spaced_text_surf(txt, size, color, weight='bold', spacing=2):
         s = pygame.Surface((max(1, w), h), pygame.SRCALPHA, 32)
         x = 0
         for c in chars:
-            s.blit(c, (x, 0))
+            # can theo chan chu: chu co dau (Ỉ, Ố...) cao hon chu thuong o mot so phong (Be Vietnam Pro)
+            s.blit(c, (x, h - c.get_height()))
             x += c.get_width() + spacing
         return s
     return cached(key, make)
@@ -1734,9 +1735,9 @@ class GameScreen:
         for b in self.modal_buttons:
             b.update(dt, mouse if modal_on else (-999, -999))
 
-        # web: chay viec AI dang cho (sau khi da ve it nhat 1 frame "dang suy nghi")
+        # web: chay viec AI dang cho SAU KHI hieu ung dat quan (0.3s) da xong -> quan X khong bi dung hinh
         for j in (self.ai_job, self.hint_job):
-            if j and 'work' in j and time.perf_counter() - j['t0'] > 0.06:
+            if j and 'work' in j and time.perf_counter() - j['t0'] > 0.34:
                 j.pop('work')()
         # ket qua AI
         job = self.ai_job
