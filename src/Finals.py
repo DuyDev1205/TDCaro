@@ -284,6 +284,15 @@ def rule_win_cells(board, r, c, block):
     return None
 
 
+def ai_move_steps(board, col, level, block=False):
+    """Ban web: nhu ai_move nhung chia doan (generator), ket qua tra ve qua StopIteration.value."""
+    if level == 'easy':
+        yield
+        return best_move(board, col)                       # AI ENGINE GOC (nhanh, khong can chia doan)
+    return (yield from ai_engine_v2.choose_move_steps(board, col, level, base_score=stupid_score,
+                                                      base_moves=possible_moves, block=block))
+
+
 def ai_move(board, col, level, block=False):
     """Chon nuoc theo do kho. 'easy' = AI GOC (best_move) giu nguyen."""
     if level == 'easy':
@@ -1507,7 +1516,8 @@ class GameScreen:
                     job['result'] = None
             job['done'] = True
         if IS_WEB:
-            job['work'] = work          # WebAssembly khong co luong: chay o update() sau khi da ve 1 frame
+            # WebAssembly khong co luong: AI chay tung doan ngan (~30ms) moi khung hinh -> giao dien van chuyen dong
+            job['gen'] = ai_move_steps(board_copy, color, level, block)
         else:
             threading.Thread(target=work, daemon=True).start()
         return job
@@ -1740,10 +1750,22 @@ class GameScreen:
         # (doi them 3 khung hinh sau khi quan da du co -> trinh duyet chac chan da hien thi khung hinh do)
         self._settle = 0 if self.anim else getattr(self, '_settle', 0) + 1
         for j in (self.ai_job, self.hint_job):
-            if j and 'work' in j:
+            if j and 'gen' in j:
                 waited = time.perf_counter() - j['t0']
-                if (self._settle >= 3 and waited > 0.08) or waited > 1.5:
-                    j.pop('work')()
+                if j.get('started') or (self._settle >= 3 and waited > 0.08) or waited > 1.5:
+                    j['started'] = True
+                    try:
+                        next(j['gen'])                       # 1 doan tinh (~30ms)
+                    except StopIteration as e:
+                        j['result'], j['done'] = e.value, True
+                        del j['gen']
+                    except Exception:
+                        try:
+                            j['result'] = best_move([row[:] for row in self.board], 'w' if j is self.ai_job else 'r')
+                        except Exception:
+                            j['result'] = None
+                        j['done'] = True
+                        del j['gen']
         # ket qua AI
         job = self.ai_job
         if job and job['done'] and time.perf_counter() - job['t0'] >= AI_MIN_THINK:

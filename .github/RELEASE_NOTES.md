@@ -10,6 +10,8 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Web:** máy suy nghĩ mà màn hình không còn đứng hình (AI tính từng đoạn ngắn xen kẽ với vẽ, sức mạnh giữ nguyên)
+- **Sửa lỗi AI (Khó/Cực khó):** khi tìm chuỗi ép thắng bị hết giờ, bàn cờ nội bộ có thể còn sót quân thử — đã sửa
 - **Web:** tên tab trình duyệt là "TD Caro" (trước hiện "pygame window")
 - **Sửa lỗi web:** quân vừa đánh luôn hiện đủ kích thước trước khi máy suy nghĩ (kể cả máy yếu); trình duyệt không còn dùng nhầm bản cũ; chữ có dấu (TỈ SỐ…) thẳng hàng
 - **Sửa lỗi web:** âm thanh không còn rè/giật khi máy đang suy nghĩ (tiếng hiệu ứng do trình duyệt phát bằng Web Audio)

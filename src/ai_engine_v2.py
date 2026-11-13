@@ -517,29 +517,31 @@ class Engine:
             cand = sorted(myFours, key=lambda i: -_tval(self.types_at(i, p)))
         for m in cand:
             self.place(m, p)
-            f = self.fives_through(m, p)
-            if len(f) >= 2:
-                self.undo(m, p)
-                return m
-            if len(f) == 1:
-                d = next(iter(f))
-                self.place(d, o)
-                try:
-                    r = self.vcf(p, depth - 1)
-                finally:
-                    self.undo(d, o)
-                if r is not None:
-                    self.undo(m, p)
+            try:                                  # het gio (_Timeout) giua chung van go nuoc thu
+                f = self.fives_through(m, p)
+                if len(f) >= 2:
                     return m
-            self.undo(m, p)
+                if len(f) == 1:
+                    d = next(iter(f))
+                    self.place(d, o)
+                    try:
+                        r = self.vcf(p, depth - 1)
+                    finally:
+                        self.undo(d, o)
+                    if r is not None:
+                        return m
+            finally:
+                self.undo(m, p)
         self.vcf_fail[key] = depth
         return None
 
     def try_vcf(self, p, depth, budget):
         self.vdeadline = min(time.perf_counter() + budget, self.deadline)
+        self.vcf_timeout = False
         try:
             return self.vcf(p, depth)
         except _Timeout:
+            self.vcf_timeout = True
             return None
         finally:
             self.vdeadline = INF
@@ -712,28 +714,31 @@ class Engine:
         self.tt[key] = (depth, best, flag, best_m)
         return best
 
+    def root_iter(self, p, order, depth):
+        """1 vong iterative deepening o goc. Tra ve (nuoc tot nhat, thu tu moi, alpha). Co the nem _Timeout."""
+        o = 3 - p
+        alpha = -INF
+        vals = []
+        cur = order[0]
+        for m in order:
+            self.place(m, p)
+            try:
+                v = -self.search(o, depth - 1, -INF, -alpha, 1)
+            finally:
+                self.undo(m, p)
+            vals.append((v, m))
+            if v > alpha:
+                alpha, cur = v, m
+        vals.sort(key=lambda x: -x[0])
+        return cur, [m for v, m in vals], alpha
+
     def root_search(self, p, root_moves, max_depth, budget):
         self.deadline = time.perf_counter() + budget
-        o = 3 - p
         best = root_moves[0]
         order = list(root_moves)
         for depth in range(1, max_depth + 1):
             try:
-                alpha = -INF
-                vals = []
-                cur = order[0]
-                for m in order:
-                    self.place(m, p)
-                    try:
-                        v = -self.search(o, depth - 1, -INF, -alpha, 1)
-                    finally:
-                        self.undo(m, p)
-                    vals.append((v, m))
-                    if v > alpha:
-                        alpha, cur = v, m
-                best = cur
-                vals.sort(key=lambda x: -x[0])
-                order = [m for v, m in vals]
+                best, order, alpha = self.root_iter(p, order, depth)
                 if alpha >= WIN - 100 or alpha <= -(WIN - 100):
                     break
             except _Timeout:
@@ -902,6 +907,147 @@ LEVEL_CFG = {
                    vcf_filter=(16, 0.05, 0.35), vct_filter=None,
                    beam=(16, 12, 10, 8, 7, 6, 5, 5, 4, 4, 4, 4), max_ply=18, max_depth=12),
 }
+
+
+# --------------------------------------------------------------------------
+# BAN CHIA DOAN (cho ban web - WebAssembly khong co luong): giong het cac muc tren nhung chia viec
+# thanh nhieu doan ngan (yield giua cac doan) de giao dien van chuyen dong khi may dang nghi.
+# Tong thoi gian tinh (CPU) giu nguyen nhu ban thuong; bang chuyen vi (tt) va vcf_fail duoc giu
+# qua cac doan -> doan sau tinh tiep tu ket qua doan truoc.
+# --------------------------------------------------------------------------
+def _normal_steps(grid, col, base_score, base_moves, block, sl):
+    me = 1 if col == 'w' else 2
+    eng = Engine(grid, me, block)
+    op = _opening(eng)
+    if op:
+        return op
+    mv, scored, opp_open = _tactical(eng, me)
+    if mv is not None:
+        return eng.rc(mv)
+    yield
+    anticol = 'r' if col == 'w' else 'w'
+    work = [row[:] for row in grid]
+    if base_score is None:
+        base_score = lambda b, c1, c2, y, x: dict((eng.rc(x_[1]), x_[0]) for x_ in scored).get((y, x), 0)
+    if opp_open:
+        allowed = {i for sc, i, ta, td in scored if i in set(opp_open) or FOUR in ta}
+        moves = [eng.rc(i) for i in allowed]
+    else:
+        moves = list(base_moves(work)) if base_moves else [eng.rc(i) for sc, i, ta, td in scored]
+    ranked = sorted(((base_score(work, col, anticol, y, x), random.random(), (y, x)) for (y, x) in moves),
+                    reverse=True)
+    yield
+    used = 0.0
+    for s, _, (y, x) in ranked[:6]:
+        if used > 0.35:
+            break
+        i = eng.idx(y, x)
+        t0 = time.perf_counter()
+        eng.place(i, me)
+        try:
+            bad = eng.try_vcf(3 - me, 10, 0.06) is not None
+        finally:
+            eng.undo(i, me)
+        used += time.perf_counter() - t0
+        if not bad:
+            return (y, x)
+        yield
+    return ranked[0][2]
+
+
+def _search_steps(grid, col, level, block, sl):
+    me = 1 if col == 'w' else 2
+    op_ = 3 - me
+    eng = Engine(grid, me, block)
+    op = _opening(eng)
+    if op:
+        return op
+    cfg = LEVEL_CFG[level]
+    budget = cfg['budget']
+    spent = 0.0
+    mv, scored, opp_open = _tactical(eng, me)
+    if mv is not None:
+        return eng.rc(mv)
+    if not scored:
+        return None
+    yield
+    # 1) tu tim chuoi ep thang (VCF), tung doan
+    d, t = cfg['vcf_self']
+    used = 0.0
+    while used < t:
+        t0 = time.perf_counter()
+        v = eng.try_vcf(me, d, min(sl, t - used))
+        dt = time.perf_counter() - t0
+        used += dt
+        spent += dt
+        if v is not None:
+            return eng.rc(v)
+        if not eng.vcf_timeout:
+            break
+        yield
+    # 2) cac nuoc goc
+    if opp_open:
+        root = [i for sc, i, ta, td in scored if i in set(opp_open) or FOUR in ta]
+    else:
+        root = [i for sc, i, ta, td in scored[:cfg['root_k']]]
+    # 3) loai nuoc de doi thu co chuoi ep thang
+    if len(root) > 1:
+        d, per, total = cfg['vcf_filter']
+        safe = []
+        used = 0.0
+        for m in root:
+            if used > total:
+                safe.append(m)
+                continue
+            t0 = time.perf_counter()
+            eng.place(m, me)
+            try:
+                bad = eng.try_vcf(op_, d, per) is not None
+            finally:
+                eng.undo(m, me)
+            dt = time.perf_counter() - t0
+            used += dt
+            spent += dt
+            if not bad:
+                safe.append(m)
+            yield
+        if safe:
+            root = safe
+    if len(root) == 1:
+        return eng.rc(root[0])
+    # 4) alpha-beta dao sau dan, moi doan toi da `sl` giay; doan bi ngat thi lam lai voi bang chuyen vi
+    eng.beam = cfg['beam']
+    eng.max_ply = cfg['max_ply']
+    remain = max(0.15, budget - spent)
+    used = 0.0
+    order = list(root)
+    best = root[0]
+    depth = 1
+    while depth <= cfg['max_depth'] and used < remain:
+        t0 = time.perf_counter()
+        eng.deadline = t0 + min(sl, remain - used)
+        done = False
+        try:
+            best, order, alpha = eng.root_iter(me, order, depth)
+            depth += 1
+            done = alpha >= WIN - 100 or alpha <= -(WIN - 100)
+        except _Timeout:
+            pass
+        finally:
+            eng.deadline = INF
+        used += time.perf_counter() - t0
+        if done:
+            break
+        yield
+    return eng.rc(best)
+
+
+def choose_move_steps(grid, col, level, base_score=None, base_moves=None, block=False, slice_s=0.03):
+    """Nhu choose_move nhung la generator: moi lan next() tinh toi da ~slice_s giay.
+    Ket qua (row, col) tra ve qua StopIteration.value."""
+    if level == 'normal':
+        return (yield from _normal_steps(grid, col, base_score, base_moves, block, slice_s))
+    return (yield from _search_steps(grid, col, level, block, slice_s))
 
 
 def choose_move(grid, col, level, base_score=None, base_moves=None, block=False):
