@@ -880,7 +880,14 @@ class Button:
         if self.hotkey:
             hk = text_surf(self.hotkey, px(10), fg_dim, 'bold')
             chip_w, chip_h = hk.get_width() + px(12), px(20)
-            if r.w - total > 2 * chip_w + px(36):
+            if r.w - total > 2 * chip_w + px(36):           # rong: chu o giua, nhan phim o mep phai
+                show = True
+            elif r.w - total >= chip_w + px(30):            # hep: chu can giua phan con lai ben trai nhan
+                show = True
+                cx = r.x + (r.w - chip_w - px(10) - total) // 2
+            else:
+                show = False
+            if show:
                 cr = pygame.Rect(r.right - px(10) - chip_w, r.centery - chip_h // 2, chip_w, chip_h)
                 surf.blit(round_rect_surf(cr.w, cr.h, px(6), lerp_color(col, fg, 0.13)), cr)
                 surf.blit(hk, hk.get_rect(center=cr.center))
@@ -1023,12 +1030,12 @@ class MenuScreen:
         self.btn_update = Button(lambda: app.updater.label(), app.updater.start, 'primary', font_size=13,
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
         self.btn_full = Button(lambda: 'Thoát toàn màn hình' if app.fullscreen else 'Toàn màn hình',
-                               app.toggle_fullscreen, font_size=13, radius=20)
+                               app.toggle_fullscreen, hotkey='F11', font_size=13, radius=20)
         self.btn_music = Button(lambda: ('Nhạc: ' + (app.track_title or 'Bật')) if st['music'] else 'Nhạc nền: Tắt',
-                                app.toggle_music, font_size=13, radius=20)
+                                app.toggle_music, hotkey='B', font_size=13, radius=20)
         self.btn_reset = Button('Đặt lại', app.reset_scores, font_size=13, radius=18,
                                 enabled=lambda: any(app.scores.values()))
-        self.btn_next = Button('Bài tiếp', app.skip_track, font_size=13, radius=20,
+        self.btn_next = Button('Bài tiếp', app.skip_track, hotkey='K', font_size=13, radius=20,
                                enabled=lambda: app.music_ok and len(app.tracks) > 1)
         self.buttons = ([self.btn_update, self.btn_full, self.btn_next, self.btn_music, self.btn_reset, self.btn_start,
                          self.btn_online, self.btn_quit, self.btn_sound, self.btn_minus, self.btn_plus,
@@ -1232,11 +1239,12 @@ class MenuScreen:
         self.btn_reset.rect = pygame.Rect(pr.right + px(12), pr.centery - px(18), rw, px(36))
         up = self.app.updater
         W = self.app.size[0]
-        fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        chip = lambda k: text_surf(k, px(10), (0, 0, 0), 'bold').get_width() + px(22)
+        fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('F11')
         self.btn_full.rect = pygame.Rect(W - px(24) - fw, px(20), fw, px(40))
-        nw = text_surf(self.btn_next.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        nw = text_surf(self.btn_next.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('K')
         self.btn_next.rect = pygame.Rect(self.btn_full.rect.x - px(12) - nw, px(20), nw, px(40))
-        mw = text_surf(self.btn_music.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40)
+        mw = text_surf(self.btn_music.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('B')
         self.btn_music.rect = pygame.Rect(self.btn_next.rect.x - px(8) - mw, px(20), mw, px(40))
         if up.visible():
             tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
@@ -2830,8 +2838,8 @@ class App:
             return False
 
     def skip_track(self):
-        if self.music_ok and self.next_track() and self.state == 'game':
-            self.game.show_toast('Đang phát: ' + self.track_title)
+        if self.music_ok and self.next_track():
+            self.notify('Đang phát: ' + self.track_title)
 
     def toggle_music(self):
         self.settings['music'] = not self.settings['music']
@@ -2848,21 +2856,47 @@ class App:
                     pygame.mixer.music.pause()
             except Exception:
                 pass
-        if self.state == 'game':
-            on = self.settings['music']
-            self.game.show_toast('Nhạc nền: Bật · ' + self.track_title if on and self.music_ok else
-                                 'Nhạc nền: ' + ('Bật' if on else 'Tắt'))
+        on = self.settings['music']
+        self.notify('Nhạc nền: Bật · ' + self.track_title if on and self.music_ok else
+                    'Nhạc nền: ' + ('Bật' if on else 'Tắt'))
 
     def reset_scores(self):
         for k in self.scores:
             self.scores[k] = 0
+        self.notify('Đã đặt lại tỉ số')
+
+    def notify(self, txt):
+        """Thong bao nho: trong van dung toast cua man choi; o menu / sanh ve o cuoi man hinh."""
         if self.state == 'game':
-            self.game.show_toast('Đã đặt lại tỉ số')
+            self.game.show_toast(txt)
+        else:
+            self._toast = (txt, self.now)
+
+    def draw_toast(self, surf):
+        t = getattr(self, '_toast', None)
+        if not t or self.state == 'game':
+            return
+        txt, t0 = t
+        age = self.now - t0
+        if age > 1.8:
+            self._toast = None
+            return
+        th = self.th
+        a = clamp(min(age / 0.15, (1.8 - age) / 0.3), 0, 1)
+        ts = text_surf(txt, px(13), th['text'], 'semibold')
+        W, H = self.size
+        tr = pygame.Rect(0, 0, ts.get_width() + px(30), px(34))
+        tr.center = (W // 2, H - px(70) - int(px(6) * a))
+        tmp = pygame.Surface((tr.w + px(40), tr.h + px(40)), pygame.SRCALPHA, 32)
+        tmp.fill((0, 0, 0, 0))
+        draw_card(tmp, pygame.Rect(px(20), px(20), tr.w, tr.h), px(17), th['panel'], th['border'], 1, (px(10), 80, px(4)))
+        tmp.blit(ts, ts.get_rect(center=(px(20) + tr.w // 2, px(20) + tr.h // 2)))
+        tmp.set_alpha(int(255 * a))
+        surf.blit(tmp, (tr.x - px(20), tr.y - px(20)))
 
     def toggle_sound(self):
         self.settings['sound'] = not self.settings['sound']
-        if self.state == 'game':
-            self.game.show_toast('Âm thanh: ' + ('Bật' if self.settings['sound'] else 'Tắt'))
+        self.notify('Âm thanh: ' + ('Bật' if self.settings['sound'] else 'Tắt'))
 
     def start_game(self):
         self.game.new_game()
@@ -2954,6 +2988,10 @@ class App:
                 self.lobby.handle(ev)            # dang go chu: khong de phim tat (K, F11...) an phim
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_k:
                 self.skip_track()
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_m and not (ev.mod & pygame.KMOD_CTRL):
+                self.toggle_sound()
+            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_b and not (ev.mod & pygame.KMOD_CTRL):
+                self.toggle_music()
             elif ev.type == pygame.KEYDOWN and (ev.key == pygame.K_F11 or (
                     ev.key in (pygame.K_RETURN, pygame.K_KP_ENTER) and ev.mod & pygame.KMOD_ALT)):
                 self.toggle_fullscreen()
@@ -2984,6 +3022,7 @@ class App:
         scr.update(dt)
         t0 = time.perf_counter()
         scr.draw(self.canvas)
+        self.draw_toast(self.canvas)
         t1 = time.perf_counter()
         self.screen.blit(self.canvas, (0, 0))
         t2 = time.perf_counter()
