@@ -10,6 +10,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Web:** tên tab trình duyệt là "TD Caro" (trước hiện "pygame window")
 - **Sửa lỗi web:** quân vừa đánh luôn hiện đủ kích thước trước khi máy suy nghĩ (kể cả máy yếu); trình duyệt không còn dùng nhầm bản cũ; chữ có dấu (TỈ SỐ…) thẳng hàng
 - **Sửa lỗi web:** âm thanh không còn rè/giật khi máy đang suy nghĩ (tiếng hiệu ứng do trình duyệt phát bằng Web Audio)
 - **Web:** mặc định lấp kín cửa sổ và vào toàn màn hình; nút *Toàn màn hình* hoạt động; chạy mượt hơn nhiều (~60 khung hình/giây, trước ~25)

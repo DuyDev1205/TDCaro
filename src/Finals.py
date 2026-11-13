@@ -2603,6 +2603,16 @@ def _web_flag(name):
         return False
 
 
+def _web_title():
+    """Ten tab trinh duyet (SDL mac dinh dat 'pygame window')."""
+    try:
+        pygame.display.set_caption('TD Caro')
+        import platform as _pf
+        _pf.window.document.title = 'TD Caro'
+    except Exception:
+        pass
+
+
 def _wlog(stage):
     if IS_WEB:
         print(f'[tdcaro] {stage}', flush=True)
@@ -2632,6 +2642,7 @@ class App:
             w, h = _web_canvas_size()
             _wlog(f'set_mode {w}x{h}')
             self.screen = pygame.display.set_mode((w, h))
+            _web_title()
         else:
             try:
                 pygame.display.set_icon(make_icon())
@@ -2885,6 +2896,7 @@ class App:
         cw, ch = self.size
         if abs(w - cw) > 2 or abs(h - ch) > 2:
             pygame.display.set_mode((w, h))
+            _web_title()
             self.on_resize()
             self._last_size = self.size
 

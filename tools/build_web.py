@@ -31,7 +31,7 @@ def main():
     shutil.copy2(os.path.join(ROOT, 'assets', 'icon.png'), os.path.join(APP, 'favicon.png'))
     # nhac KHONG dong goi vao game: trinh duyet tai rieng tung bai khi phat (goi tai nho hon nhieu)
     shutil.copytree(os.path.join(ROOT, 'assets', 'fonts'), os.path.join(a, 'fonts'))
-    args = [sys.executable, '-m', 'pygbag', '--title', 'TDCaro', '--app_name', 'tdcaro', '--width', '1280', '--height', '800',
+    args = [sys.executable, '-m', 'pygbag', '--title', 'TD Caro', '--app_name', 'tdcaro', '--width', '1280', '--height', '800',
             '--template', os.path.join(ROOT, 'web', 'tdcaro.tmpl')]
     if '--serve' not in sys.argv:
         args.append('--build')
