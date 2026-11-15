@@ -626,6 +626,19 @@ def single_layer(owner, key, size, paint):
     return owner._layer_surf
 
 
+def overlay_layers(owner, key, bg, paint):
+    """Ban web: lop phu trong suot (the, nut, chu...) + ban ghep san nen+lop phu. Ve lai khi key doi."""
+    size = bg.get_size()
+    if getattr(owner, '_ov_key', None) != key or owner._ov.get_size() != size:
+        ov = pygame.Surface(size, pygame.SRCALPHA, 32)
+        ov.fill((0, 0, 0, 0))
+        paint(ov)
+        full = bg.copy()
+        full.blit(ov, (0, 0))
+        owner._ov_key, owner._ov, owner._full = key, ov, full
+    return owner._ov, owner._full
+
+
 def static_layer(key, size, paint):
     """Lop nen tinh (chi dung khi BAKE): ve 1 lan bang paint(surface), dung lai cho toi khi key doi."""
     def make():
@@ -970,11 +983,12 @@ class FloatingSymbols:
     def reset(self, w, h):
         self.w, self.h = w, h
         rnd = random.Random(7)
-        sizes = [px(26), px(38), px(54), px(72)]
+        light = IS_WEB and UI.touch          # dien thoai (web): it ky hieu hon, nho hon -> van muot
+        sizes = [px(22), px(30), px(40)] if light else [px(26), px(38), px(54), px(72)]
         self.items = [dict(x=rnd.uniform(0, w), y=rnd.uniform(0, h), size=rnd.choice(sizes),
                            kind=rnd.choice('xo'), vy=-rnd.uniform(6, 18) * UI.s,
                            vx=rnd.uniform(-5, 5) * UI.s, ph=rnd.uniform(0, 6.28))
-                      for _ in range(18)]
+                      for _ in range(8 if light else 18)]
 
     def update(self, dt):
         for it in self.items:
@@ -989,10 +1003,49 @@ class FloatingSymbols:
                 it['x'] = -it['size']
 
     def draw(self, surf, th, t):
+        for spr, r in self.sprites(th, t):
+            surf.blit(spr, r)
+
+    def sprites(self, th, t):
         for it in self.items:
             color = th['x'] if it['kind'] == 'x' else th['o']
             spr = flat_sprite(it['kind'], it['size'], color, th['float_alpha'])
-            blit_center(surf, spr, (it['x'], it['y'] + math.sin(t * 0.8 + it['ph']) * px(6)))
+            yield spr, spr.get_rect(center=(int(it['x']), int(it['y'] + math.sin(t * 0.8 + it['ph']) * px(6))))
+
+    def draw_under(self, surf, th, t, bg, overlay):
+        """Ban web: man hinh da co (nen + lop phu). Ve ky hieu bay DUOI lop phu ma chi sua vung nho
+        quanh moi ky hieu: phuc hoi nen -> ve ky hieu -> phu lai lop phu (giong thu tu ban may tinh)."""
+        items = list(self.sprites(th, t))
+        screen = surf.get_rect()
+        rects = _merge_rects([r.clip(screen) for _, r in items])
+        for R in rects:
+            surf.blit(bg, R.topleft, R)
+        for spr, r in items:
+            surf.blit(spr, r)
+        for R in rects:
+            surf.blit(overlay, R.topleft, R)
+
+
+def _merge_rects(rects):
+    """Gop cac hinh chu nhat chong nhau -> cac vung roi nhau (khong phu lop phu 2 lan)."""
+    rs = [r.copy() for r in rects if r.w > 0 and r.h > 0]
+    changed = True
+    while changed:
+        changed = False
+        out = []
+        while rs:
+            a = rs.pop()
+            i = 0
+            while i < len(rs):
+                if a.colliderect(rs[i]):
+                    a.union_ip(rs.pop(i))
+                    changed = True
+                    i = 0
+                else:
+                    i += 1
+            out.append(a)
+        rs = out
+    return rs
 
 
 class Confetti:
@@ -1378,12 +1431,13 @@ class MenuScreen:
         self.size_pulse = approach(self.size_pulse, 0.0, dt, 8)
         self.want_hand = any(b.hovered for b in self.buttons)
 
-    def draw_static(self, surf, th, now):
+    def draw_static(self, surf, th, now, base=True):
         """Phan khong doi cua menu (nen, tieu de, the cai dat, nhan, chu thich phim)."""
         app = self.app
         W, H = app.size
-        surf.blit(background(W, H, th), (0, 0))
-        app.floats.draw(surf, th, now)
+        if base:
+            surf.blit(background(W, H, th), (0, 0))
+            app.floats.draw(surf, th, now)
         x = self.lx
         title = gradient_text('TDCaro', self.title_px, 'black', th['x'], th['o'])
         sh = cached(('title_sh', title.get_size(), th['key']), lambda: _title_shadow(title, th))
@@ -1431,11 +1485,14 @@ class MenuScreen:
             def paint(s):
                 _SKIP_DRAW.update(dyn)
                 try:
-                    self.draw_static(s, th, 0.0)
+                    self.draw_static(s, th, 0.0, base=False)
                     self.draw_semi(s, th, pulse=False)
                 finally:
                     _SKIP_DRAW.clear()
-            surf.blit(single_layer(self, key, (W, H), paint), (0, 0))
+            bg = background(W, H, th)
+            ov, full = overlay_layers(self, key, bg, paint)
+            surf.blit(full, (0, 0))
+            app.floats.draw_under(surf, th, now, bg, ov)      # ky hieu bay muot, nam duoi the
             for b in dyn:
                 b.draw(surf, th)
             if self.size_pulse > 0.01:
@@ -2413,14 +2470,15 @@ class GameScreen:
             def paint(s):
                 _SKIP_DRAW.update(dyn)
                 try:
-                    s.blit(background(W, H, th), (0, 0))
-                    app.floats.draw(s, th, 0.0)
                     self.draw_board_static(s, th)
                     self.draw_panel_static(s, th)
                     self.draw_panel_semi(s, th, 0.0)
                 finally:
                     _SKIP_DRAW.clear()
-            surf.blit(single_layer(self, key, (W, H), paint), (0, 0))
+            bg = background(W, H, th)
+            ov, full = overlay_layers(self, key, bg, paint)
+            surf.blit(full, (0, 0))
+            app.floats.draw_under(surf, th, now, bg, ov)
             self._dyn_buttons = dyn
         else:
             surf.blit(background(W, H, th), (0, 0))
@@ -2746,12 +2804,16 @@ class LobbyScreen:
         W, H = app.size
         c = self.card
 
-        def paint(s, t):
-            s.blit(background(W, H, th), (0, 0))
-            app.floats.draw(s, th, t)
+        def paint(s, t, base=True):
+            if base:
+                s.blit(background(W, H, th), (0, 0))
+                app.floats.draw(s, th, t)
             draw_card(s, c, px(26), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
         if BAKE:
-            surf.blit(static_layer(('lobby_static', W, H, th['key'], tuple(c)), (W, H), lambda s: paint(s, 0.0)), (0, 0))
+            bg = background(W, H, th)
+            ov, full = overlay_layers(self, ('lobby', W, H, th['key'], tuple(c)), bg, lambda s: paint(s, 0.0, False))
+            surf.blit(full, (0, 0))
+            app.floats.draw_under(surf, th, now, bg, ov)
         else:
             paint(surf, now)
         pad = px(36)

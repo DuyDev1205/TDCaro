@@ -10,6 +10,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Web:** các ký hiệu X/O ở nền trôi mượt như bản máy tính (trước bị đứng rồi nhảy cóc)
 - **Web:** dòng "Đang tải TD Caro…" nằm chính giữa màn hình trên điện thoại
 - **Giao diện điện thoại:** cầm dọc có bố cục 1 cột riêng (chữ to, dễ chạm), chạm ô tên/mã phòng hiện bàn phím của máy
 - **Web mượt hơn:** điện thoại ~21 → ~39 khung hình/giây; máy suy nghĩ không còn khựng lâu
