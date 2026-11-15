@@ -407,6 +407,8 @@ THEME_KEYS = list(THEME_DEFS)
 # ------------------------------ UI scale ----------------------------------
 
 class UI:
+    portrait = False       # man hinh doc (dien thoai cam doc) -> bo cuc 1 cot
+    touch = False          # man hinh cam ung / doc -> an nhan phim tat, dung hop nhap cua trinh duyet
     s = 1.0
 
 
@@ -610,6 +612,18 @@ def background(w, h, th):
             s.blit(pygame.transform.smoothscale(blob, (w, h)), (0, 0))
         return s
     return cached(key, make)
+
+
+_SKIP_DRAW = set()          # nut dang hover/nhan: khong ve vao lop nen, ve rieng phia tren
+
+
+def single_layer(owner, key, size, paint):
+    """Lop nen chi giu 1 ban cho moi man hinh: ve lai khi key doi (vd. bam nut, doi luot)."""
+    if getattr(owner, '_layer_key', None) != key or owner._layer_surf.get_size() != size:
+        s = pygame.Surface(size, 0, 32)
+        paint(s)
+        owner._layer_key, owner._layer_surf = key, s
+    return owner._layer_surf
 
 
 def static_layer(key, size, paint):
@@ -854,8 +868,14 @@ class Button:
         border = lerp_color(th['border'], th['accent'], hq * 0.7)
         return col, th['text'], th['text_dim'], border, False, hq
 
-    def draw(self, surf, th, ox=0, oy=0):
+    def vis_key(self, th):
         if self.rect.w <= 0:
+            return None
+        col, fg, fg_dim, border, filled, hq = self.colors(th)
+        return (tuple(self.rect), hq, self.down and self.hovered, col, fg, border, filled, self.text())
+
+    def draw(self, surf, th, ox=0, oy=0):
+        if self.rect.w <= 0 or self in _SKIP_DRAW:
             return
         col, fg, fg_dim, border, filled, hq = self.colors(th)
         r = self.rect.move(-ox, -oy - int(px(2) * hq))
@@ -865,8 +885,18 @@ class Button:
         if filled:
             sh, pad = shadow_surf(r.w, r.h, rad, px(14), 120 if th['dark'] else 85, th['accent'])
             surf.blit(sh, (r.x - pad, r.y - pad + px(5)))
-        surf.blit(round_rect_surf(r.w, r.h, rad, col, border, 1 if border else 0), r.topleft)
-        self.draw_content(surf, th, r, fg, fg_dim, col)
+        # nen + chu + nhan phim gop san thanh 1 anh (1 lan chep/khung hinh thay vi 3-4 -> nhe hon tren web)
+        icon = self.icon(th) if self.icon else None
+        key = ('btn', r.w, r.h, rad, col, border, self.text(), fg, fg_dim, self.font_size,
+               None if UI.touch else self.hotkey, icon, th['key'])
+
+        def make(w=r.w, h=r.h):
+            s = pygame.Surface((w, h), pygame.SRCALPHA, 32)
+            s.fill((0, 0, 0, 0))
+            s.blit(round_rect_surf(w, h, rad, col, border, 1 if border else 0), (0, 0))
+            self.draw_content(s, th, pygame.Rect(0, 0, w, h), fg, fg_dim, col)
+            return s
+        surf.blit(cached(key, make), r.topleft)
 
     def draw_content(self, surf, th, r, fg, fg_dim, col):
         ts = text_surf(self.text(), px(self.font_size), fg, 'semibold')
@@ -877,7 +907,7 @@ class Button:
             icon_w = isz + px(8)
         total = icon_w + ts.get_width()
         cx = r.centerx - total // 2
-        if self.hotkey:
+        if self.hotkey and not UI.touch:
             hk = text_surf(self.hotkey, px(10), fg_dim, 'bold')
             chip_w, chip_h = hk.get_width() + px(12), px(20)
             if r.w - total > 2 * chip_w + px(36):           # rong: chu o giua, nhan phim o mep phai
@@ -901,6 +931,9 @@ class ThemeSwatch(Button):
         super().__init__('', lambda: app.set_theme(key), selected=lambda: app.settings['theme'] == key)
         self.key = key
 
+    def vis_key(self, th):
+        return (tuple(self.rect), round(self.h * 6), self.selected())
+
     def draw(self, surf, th, ox=0, oy=0):
         t2 = THEMES[self.key]
         sel = self.selected()
@@ -911,14 +944,20 @@ class ThemeSwatch(Button):
         if sel:
             sh, pad = shadow_surf(r.w, r.h, px(14), px(12), 90 if th['dark'] else 60, th['accent'])
             surf.blit(sh, (r.x - pad, r.y - pad + px(4)))
-        surf.blit(round_rect_surf(r.w, r.h, px(14), bg, border, px(2) if sel else 1), r)
-        pr = pygame.Rect(r.x + px(8), r.y + px(8), r.w - px(16), r.h - px(38))
-        surf.blit(round_rect_surf(pr.w, pr.h, px(10), t2['board'], t2['board_edge'], px(2)), pr)
-        isz = min(px(24), pr.h - px(10))
-        blit_center(surf, piece_sprite('x', isz, t2['x']), (pr.centerx - isz * 0.6, pr.centery))
-        blit_center(surf, piece_sprite('o', isz, t2['o']), (pr.centerx + isz * 0.6, pr.centery))
-        draw_text(surf, t2['name'], px(12), th['text'] if sel else th['text_dim'],
-                  (r.centerx, r.bottom - px(15)), 'semibold', 'center')
+
+        def make(w=r.w, h=r.h):
+            s = pygame.Surface((w, h), pygame.SRCALPHA, 32)
+            s.fill((0, 0, 0, 0))
+            s.blit(round_rect_surf(w, h, px(14), bg, border, px(2) if sel else 1), (0, 0))
+            pr = pygame.Rect(px(8), px(8), w - px(16), h - px(38))
+            s.blit(round_rect_surf(pr.w, pr.h, px(10), t2['board'], t2['board_edge'], px(2)), pr)
+            isz = min(px(24), pr.h - px(10))
+            blit_center(s, piece_sprite('x', isz, t2['x']), (pr.centerx - isz * 0.6, pr.centery))
+            blit_center(s, piece_sprite('o', isz, t2['o']), (pr.centerx + isz * 0.6, pr.centery))
+            draw_text(s, t2['name'], px(12), th['text'] if sel else th['text_dim'],
+                      (w // 2, h - px(15)), 'semibold', 'center')
+            return s
+        surf.blit(cached(('swatch', self.key, r.w, r.h, sel, bg, border, th['key']), make), r.topleft)
 
 
 # ------------------------------ background FX -------------------------------
@@ -1031,7 +1070,8 @@ class MenuScreen:
                                  radius=20, enabled=lambda: app.updater.state in ('available', 'error'))
         self.btn_full = Button(lambda: 'Thoát toàn màn hình' if app.fullscreen else 'Toàn màn hình',
                                app.toggle_fullscreen, hotkey='F11', font_size=13, radius=20)
-        self.btn_music = Button(lambda: ('Nhạc: ' + (app.track_title or 'Bật')) if st['music'] else 'Nhạc nền: Tắt',
+        self.btn_music = Button(lambda: (('Nhạc: Bật' if UI.portrait else 'Nhạc: ' + (app.track_title or 'Bật'))
+                                         if st['music'] else ('Nhạc: Tắt' if UI.portrait else 'Nhạc nền: Tắt')),
                                 app.toggle_music, hotkey='B', font_size=13, radius=20)
         self.btn_reset = Button('Đặt lại', app.reset_scores, font_size=13, radius=18,
                                 enabled=lambda: any(app.scores.values()))
@@ -1071,7 +1111,85 @@ class MenuScreen:
         self.set_level(keys[(i + 1) % len(keys)])
 
     # ---- layout
+    def layout_portrait(self):
+        """Man hinh doc: 1 cot - tieu de, nut choi, roi the cai dat (gon hon)."""
+        W, H = self.app.size
+        m = px(16)
+        cw = W - 2 * m
+        self.lx, self.colL = m, cw
+        self.title_px, self.logo_px, self.logo_gap, self.sub_px = px(56), px(40), px(48), px(13)
+        self.title_s = gradient_text('TDCaro', self.title_px, 'black', self.app.th['x'], self.app.th['o'])
+        y = px(66)
+        self.logo_y = y + px(20)
+        y += px(46)
+        self.title_y = y
+        y += self.title_s.get_height() + px(2)
+        self.sub_y = y
+        y += px(18) + px(14)
+        self.desc_y = -9999
+        self.score_y = y
+        y += px(48) + px(14)
+        self.btn_start.rect = pygame.Rect(m, y, cw, px(52))
+        y += px(52) + px(10)
+        half = (cw - px(10)) // 2
+        self.btn_online.rect = pygame.Rect(m, y, half, px(46))
+        self.btn_sound.rect = pygame.Rect(m + half + px(10), y, cw - half - px(10), px(46))
+        self.btn_quit.rect = pygame.Rect(0, 0, 0, 0)
+        y += px(46) + px(14)
+        # the cai dat (gon)
+        pad, lbl_h, sec = px(16), px(16), px(12)
+        lg = px(6)
+        card_h = (pad + lbl_h + lg + px(42) + px(8) + px(32) + sec + lbl_h + lg + px(36) + sec +
+                  lbl_h + lg + px(40) + sec + lbl_h + lg + px(34) + px(6) + px(38) + sec + lbl_h + lg + px(66) + pad)
+        self.card = pygame.Rect(m, y, cw, card_h)
+        self._layout_card(pad, lbl_h, lg, sec, dict(size=px(42), chips=px(32), level=px(36), first=px(40),
+                                                     rule=px(34), info_gap=px(6), info=px(38), swatch=px(66),
+                                                     pm=px(46), g=px(8)))
+
+    def _layout_card(self, pad, lbl_h, lg, sec, d):
+        ix, iw = self.card.x + pad, self.card.w - 2 * pad
+        y = self.card.y + pad
+        g = d['g']
+        self.lbl_size = (ix, y)
+        y += lbl_h + lg
+        self.btn_minus.rect = pygame.Rect(ix, y, d['pm'], d['size'])
+        self.btn_plus.rect = pygame.Rect(ix + iw - d['pm'], y, d['pm'], d['size'])
+        self.size_rect = pygame.Rect(ix + d['pm'] + px(10), y, iw - 2 * (d['pm'] + px(10)), d['size'])
+        y += d['size'] + px(8)
+        nc = len(self.chips)
+        cw = (iw - (nc - 1) * g) // nc
+        for i, b in enumerate(self.chips):
+            b.rect = pygame.Rect(ix + i * (cw + g), y, cw, d['chips'])
+        y += d['chips'] + sec
+        self.lbl_level = (ix, y)
+        y += lbl_h + lg
+        lw = (iw - 3 * g) // 4
+        for i, b in enumerate(self.level_chips):
+            b.rect = pygame.Rect(ix + i * (lw + g), y, lw, d['level'])
+        y += d['level'] + sec
+        self.lbl_first = (ix, y)
+        y += lbl_h + lg
+        hw = (iw - g) // 2
+        self.btn_first_p.rect = pygame.Rect(ix, y, hw, d['first'])
+        self.btn_first_a.rect = pygame.Rect(ix + hw + g, y, iw - hw - g, d['first'])
+        y += d['first'] + sec
+        self.lbl_rule = (ix, y)
+        y += lbl_h + lg
+        for i, b in enumerate(self.rule_chips):
+            b.rect = pygame.Rect(ix + i * (hw + g), y, hw if i == 0 else iw - hw - g, d['rule'])
+        y += d['rule'] + d['info_gap']
+        self.rule_info = pygame.Rect(ix, y, iw, d['info'])
+        y += d['info'] + sec
+        self.lbl_theme = (ix, y)
+        y += lbl_h + lg
+        sw = (iw - 3 * g) // 4
+        for i, sw_b in enumerate(self.swatches):
+            sw_b.rect = pygame.Rect(ix + i * (sw + g), y, sw, d['swatch'])
+
     def layout(self):
+        if UI.portrait:
+            return self.layout_portrait()
+        self.title_px, self.logo_px, self.logo_gap, self.sub_px = px(108), px(68), px(80), px(20)
         W, H = self.app.size
         colL, colR, gap = px(440), px(500), px(90)
         lx = (W - (colL + gap + colR)) // 2
@@ -1198,7 +1316,7 @@ class MenuScreen:
         bg = lerp_color(th['panel_alt'], accent, 0.07)
         surf.blit(round_rect_surf(r.w, r.h, px(12), bg, lerp_color(th['border'], accent, 0.35), 1), r.topleft)
         # so do: cac quan co tren 1 "rang" nho
-        ps, step = px(22), px(23)
+        ps, step = (px(16), px(17)) if UI.portrait else (px(22), px(23))
         seq = 'oxxxxxo' if block else 'xxxxx'
         x0, cy = r.x + px(12), r.centery
         for i, k in enumerate(seq):
@@ -1217,7 +1335,7 @@ class MenuScreen:
         surf.blit(ls, ls.get_rect(center=br.center))
         # mo ta
         title = 'Bị chặn hai đầu' if block else '5 quân liên tiếp'
-        draw_text(surf, title, px(14), th['text'], (x0 + dw + px(12), cy), 'semibold', 'midleft')
+        draw_text(surf, title, px(13 if UI.portrait else 14), th['text'], (x0 + dw + px(12), cy), 'semibold', 'midleft')
 
     def score_pill(self, th):
         sc = self.app.scores
@@ -1239,16 +1357,20 @@ class MenuScreen:
         self.btn_reset.rect = pygame.Rect(pr.right + px(12), pr.centery - px(18), rw, px(36))
         up = self.app.updater
         W = self.app.size[0]
-        chip = lambda k: text_surf(k, px(10), (0, 0, 0), 'bold').get_width() + px(22)
+        chip = lambda k: 0 if UI.touch else text_surf(k, px(10), (0, 0, 0), 'bold').get_width() + px(22)
+        top = px(12) if UI.portrait else px(20)
         fw = text_surf(self.btn_full.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('F11')
-        self.btn_full.rect = pygame.Rect(W - px(24) - fw, px(20), fw, px(40))
+        edge = px(12) if UI.portrait else px(24)
+        self.btn_full.rect = pygame.Rect(W - edge - fw, top, fw, px(40))
         nw = text_surf(self.btn_next.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('K')
-        self.btn_next.rect = pygame.Rect(self.btn_full.rect.x - px(12) - nw, px(20), nw, px(40))
+        self.btn_next.rect = pygame.Rect(self.btn_full.rect.x - px(8) - nw, top, nw, px(40))
         mw = text_surf(self.btn_music.text(), px(13), (0, 0, 0), 'semibold').get_width() + px(40) + chip('B')
-        self.btn_music.rect = pygame.Rect(self.btn_next.rect.x - px(8) - mw, px(20), mw, px(40))
+        self.btn_music.rect = pygame.Rect(self.btn_next.rect.x - px(8) - mw, top, mw, px(40))
         if up.visible():
             tw = text_surf(up.label(), px(13), (0, 0, 0), 'semibold').get_width()
-            self.btn_update.rect = pygame.Rect(self.btn_music.rect.x - px(12) - tw - px(40), px(20), tw + px(40), px(40))
+            self.btn_update.rect = pygame.Rect(self.btn_music.rect.x - px(12) - tw - px(40), top, tw + px(40), px(40))
+            if UI.portrait:                              # doc: dua nut cap nhat xuong duoi hang nut tren
+                self.btn_update.rect = pygame.Rect(W - edge - tw - px(40), top + px(46), tw + px(40), px(36))
         else:
             self.btn_update.rect = pygame.Rect(0, 0, 0, 0)
         for b in self.buttons:
@@ -1263,15 +1385,17 @@ class MenuScreen:
         surf.blit(background(W, H, th), (0, 0))
         app.floats.draw(surf, th, now)
         x = self.lx
-        title = gradient_text('TDCaro', px(108), 'black', th['x'], th['o'])
+        title = gradient_text('TDCaro', self.title_px, 'black', th['x'], th['o'])
         sh = cached(('title_sh', title.get_size(), th['key']), lambda: _title_shadow(title, th))
-        surf.blit(sh, (x + px(2), self.title_y + px(6)))
+        surf.blit(sh, (x + px(2), self.title_y + px(4 if UI.portrait else 6)))
         surf.blit(title, (x - px(2), self.title_y))
-        draw_spaced(surf, 'AI CHALLENGE  ·  GOMOKU', px(20), th['bg_accent'], (x, self.sub_y), 'bold', px(4))
-        draw_text(surf, 'Nối 5 quân liên tiếp theo hàng ngang, dọc hoặc chéo',
-                  px(16), th['bg_text_dim'], (x, self.desc_y))
-        draw_text(surf, 'để giành chiến thắng trước trí tuệ nhân tạo.',
-                  px(16), th['bg_text_dim'], (x, self.desc_y + px(24)))
+        draw_spaced(surf, 'AI CHALLENGE  ·  GOMOKU', self.sub_px, th['bg_accent'], (x, self.sub_y), 'bold',
+                    px(2 if UI.portrait else 4))
+        if not UI.portrait:
+            draw_text(surf, 'Nối 5 quân liên tiếp theo hàng ngang, dọc hoặc chéo',
+                      px(16), th['bg_text_dim'], (x, self.desc_y))
+            draw_text(surf, 'để giành chiến thắng trước trí tuệ nhân tạo.',
+                      px(16), th['bg_text_dim'], (x, self.desc_y + px(24)))
         draw_card(surf, self.card, px(24), th['panel'], th['border'], 1, (px(34), th['shadow_alpha'], px(14)))
         draw_spaced(surf, 'KÍCH THƯỚC BÀN CỜ', px(12), th['text_dim'], self.lbl_size, 'bold')
         sr = self.size_rect
@@ -1281,25 +1405,57 @@ class MenuScreen:
         draw_spaced(surf, 'LUẬT CHƠI', px(12), th['text_dim'], self.lbl_rule, 'bold')
         self.draw_rule_info(surf, th, app.settings['rule'] == 'block')
         draw_spaced(surf, 'GIAO DIỆN', px(12), th['text_dim'], self.lbl_theme, 'bold')
-        draw_text(surf, 'Space: bắt đầu  ·  Mũi tên: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
+        if not UI.touch:
+          draw_text(surf, 'Space: bắt đầu  ·  Mũi tên: kích thước  ·  D: độ khó  ·  L: luật  ·  F: người đi trước  ·  T: giao diện  ·  M: âm thanh  ·  R: đặt lại tỉ số  ·  B: nhạc  ·  K: đổi bài  ·  F11: toàn màn hình  ·  Esc: thoát',
                   px(13), th['bg_text_dim'], (W // 2, H - px(22)), 'regular', 'center')
         draw_text(surf, f'v{APP_VERSION}', px(12), th['bg_text_dim'], (W - px(20), H - px(22)), 'semibold', 'midright')
+
+    def semi_buttons(self):
+        bs = [self.btn_reset, self.btn_start, self.btn_online, self.btn_quit, self.btn_sound, self.btn_minus,
+              self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips + self.level_chips + self.rule_chips + \
+            self.swatches + [self.btn_full, self.btn_music, self.btn_next]
+        if self.app.updater.visible():
+            bs.append(self.btn_update)
+        return bs
 
     def draw(self, surf):
         app, th, now = self.app, self.app.th, self.app.now
         W, H = app.size
         if BAKE:
-            key = ('menu_static', W, H, th['key'], app.settings['rule'], tuple(self.card), self.lx)
-            surf.blit(static_layer(key, (W, H), lambda s: self.draw_static(s, th, 0.0)), (0, 0))
+            # web: nen + the + nut + ti so nam trong 1 lop, chi ve lai khi co nut doi trang thai
+            semi = self.semi_buttons()
+            dyn = [b for b in semi if b.h > 0.002 or b.down]
+            key = ('menu', W, H, th['key'], app.settings['rule'], app.settings['size'], tuple(self.card), UI.touch,
+                   tuple(app.scores.values()), tuple(('dyn', id(b)) if b in dyn else b.vis_key(th) for b in semi))
+
+            def paint(s):
+                _SKIP_DRAW.update(dyn)
+                try:
+                    self.draw_static(s, th, 0.0)
+                    self.draw_semi(s, th, pulse=False)
+                finally:
+                    _SKIP_DRAW.clear()
+            surf.blit(single_layer(self, key, (W, H), paint), (0, 0))
+            for b in dyn:
+                b.draw(surf, th)
+            if self.size_pulse > 0.01:
+                sr = self.size_rect
+                surf.blit(round_rect_surf(sr.w, sr.h, px(14), th['panel_alt'], th['border'], 1), sr)
+                n = app.settings['size']
+                draw_text(surf, f'{n} × {n}', px(28) + int(px(6) * self.size_pulse), th['accent'], sr.center, 'black', 'center')
         else:
             self.draw_static(surf, th, now)
-
-        # ----- left hero column
+            self.draw_semi(surf, th, pulse=True)
+        # logo nhun nhay (dong)
         x = self.lx
         bob = math.sin(now * 2.2) * px(5)
-        blit_center(surf, themed_piece('x', px(68), th), (x + px(36), self.logo_y + bob))
-        blit_center(surf, themed_piece('o', px(68), th), (x + px(36) + px(80), self.logo_y - bob))
+        lp = self.logo_px
+        blit_center(surf, themed_piece('x', lp, th), (x + lp // 2 + px(2), self.logo_y + bob))
+        blit_center(surf, themed_piece('o', lp, th), (x + lp // 2 + px(2) + self.logo_gap, self.logo_y - bob))
 
+    def draw_semi(self, surf, th, pulse=True):
+        """Phan it thay doi: ti so, cac nut, so kich thuoc ban."""
+        app = self.app
         # score pill
         parts, gaps, pr = self.score_pill(th)
         draw_card(surf, pr, px(24), th['panel'], th['border'], 1, (px(16), th['shadow_alpha'] // 2, px(5)))
@@ -1315,7 +1471,7 @@ class MenuScreen:
         # ----- settings card (phan dong)
         sr = self.size_rect
         n = app.settings['size']
-        fs = px(28) + int(px(6) * self.size_pulse)
+        fs = px(28) + (int(px(6) * self.size_pulse) if pulse else 0)
         draw_text(surf, f'{n} × {n}', fs, th['accent'], sr.center, 'black', 'center')
         for b in ([self.btn_minus, self.btn_plus, self.btn_first_p, self.btn_first_a] + self.chips +
                   self.level_chips + self.rule_chips + self.swatches):
@@ -1643,7 +1799,53 @@ class GameScreen:
         self.toast = (txt, self.app.now)
 
     # ------------------------------------------------------------ layout
+    def layout_portrait(self):
+        """Man hinh doc: ban co o tren, bang dieu khien gon o duoi."""
+        W, H = self.app.size
+        m = px(10)
+        pd, g, bh = px(12), px(8), px(42)
+        ch = px(112)
+        panel_h = 2 * pd + ch + g + px(26) + g + px(54) + px(10) + 3 * bh + 2 * g
+        self.panel = pygame.Rect(m, H - m - panel_h, W - 2 * m, panel_h)
+        self.area = pygame.Rect(m, m, W - 2 * m, self.panel.y - 2 * m)
+        N = self.N
+        lm, pad, depth = px(20), px(10), px(8)
+        avail = min(self.area.w - 2 * lm, self.area.h - lm - depth - px(4)) - 2 * pad
+        self.cell = max(10, int(avail // N))
+        sw = self.cell * N + 2 * pad
+        self.pad, self.depth = pad, depth
+        top = self.area.y + lm + max(0, (self.area.h - lm - depth - sw) // 2)
+        self.slab = pygame.Rect(self.area.centerx - sw // 2, top, sw, sw)
+        self.gx, self.gy = self.slab.x + pad, self.slab.y + pad
+        self.line_layer = pygame.Surface(self.slab.size, pygame.SRCALPHA, 32)
+        p = self.panel
+        x, w, y = p.x + pd, p.w - 2 * pd, p.y + pd
+        self.r_header = pygame.Rect(x, y, w, 0)                 # doc: bo tieu de trong bang
+        cw = (w - px(12)) // 2
+        self.r_card_p = pygame.Rect(x, y, cw, ch)
+        self.r_card_a = pygame.Rect(x + cw + px(12), y, w - cw - px(12), ch)
+        y += ch + g
+        self.r_status = pygame.Rect(x, y, w, px(26))
+        y += px(26) + g
+        tw = (w - 2 * g) // 3
+        self.r_stats = [pygame.Rect(x + i * (tw + g), y, tw, px(54)) for i in range(3)]
+        y += px(54) + px(10)
+        self.r_hist_title = (x, y)
+        self.r_hist = pygame.Rect(x, y, w, 0)                   # doc: an lich su
+        c3 = (w - 2 * g) // 3
+        rows = [[self.btn_new, self.btn_undo, self.btn_hint],
+                [self.btn_sound, self.btn_music, self.btn_theme]]
+        for row in rows:
+            for i, b in enumerate(row):
+                b.rect = pygame.Rect(x + i * (c3 + g), y, c3 if i < 2 else w - 2 * (c3 + g), bh)
+            y += bh + g
+        half = (w - g) // 2
+        self.btn_full.rect = pygame.Rect(x, y, half, bh)
+        self.btn_menu.rect = pygame.Rect(x + half + g, y, w - half - g, bh)
+
     def layout(self):
+        if UI.portrait:
+            return self.layout_portrait()
         W, H = self.app.size
         m = px(24)
         pw = px(340)
@@ -1820,7 +2022,7 @@ class GameScreen:
                 self.hover = cell
 
         # vi tri modal (truot len khi hien)
-        mw, mh = px(440), px(340)
+        mw, mh = min(px(440), app.size[0] - px(24)), px(340)
         mr = pygame.Rect(0, 0, mw, mh)
         mr.center = (self.area.centerx, self.area.centery + int((1 - ease_out_cubic(self.modal_t)) * px(40)))
         self.modal_rect = mr
@@ -1969,7 +2171,7 @@ class GameScreen:
             surf.blit(sh, (r.x - pad, r.y - pad + px(4)))
         bg = lerp_color(th['panel_alt'], color, 0.07) if hl else th['panel_alt']
         surf.blit(round_rect_surf(r.w, r.h, px(16), bg, color if hl else th['border'], px(2) if hl else 1), r)
-        bob = math.sin(now * 4) * px(2) if active else 0
+        bob = math.sin(now * 4) * px(2) if (active and not BAKE) else 0
         blit_center(surf, themed_piece(kind, px(34), th), (r.centerx, r.y + px(32) + bob))
         if self.online:
             st = self.ost or {}
@@ -2001,22 +2203,30 @@ class GameScreen:
         draw_card(surf, self.panel, px(24), th['panel'], th['border'], 1, (px(30), th['shadow_alpha'], px(12)))
 
     def draw_panel(self, surf, th, now):
-        p = self.panel
         if not BAKE:
             self.draw_panel_static(surf, th)
-        # header
+            self.draw_panel_semi(surf, th, now)
+        else:
+            for b in getattr(self, '_dyn_buttons', ()):
+                b.draw(surf, th)
+        self.draw_panel_dynamic(surf, th, now)
+
+    def draw_panel_semi(self, surf, th, now):
+        """Phan it thay doi cua bang: tieu de, the nguoi choi, khung thong ke, lich su, cac nut."""
+        # header (man doc: khong co)
         r = self.r_header
-        blit_center(surf, themed_piece('x', px(26), th, False), (r.x + px(13), r.centery))
-        blit_center(surf, themed_piece('o', px(26), th, False), (r.x + px(37), r.centery))
-        tx = r.x + px(58)
-        draw_text(surf, 'TDCaro', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
-        draw_text(surf, 'Luật chặn 2 đầu' if self.block else 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
-        mode = f'Online · {(self.ost or {}).get("code", "")}' if self.online else LEVEL_NAMES[self.level]
-        ts = text_surf(f'{self.N}×{self.N} · {mode}', px(12), th['text'], 'bold')
-        pr = pygame.Rect(0, 0, ts.get_width() + px(20), px(28))
-        pr.midright = r.midright
-        surf.blit(round_rect_surf(pr.w, pr.h, px(14), th['panel_alt'], th['border'], 1), pr)
-        surf.blit(ts, ts.get_rect(center=pr.center))
+        if r.h > 0:
+            blit_center(surf, themed_piece('x', px(26), th, False), (r.x + px(13), r.centery))
+            blit_center(surf, themed_piece('o', px(26), th, False), (r.x + px(37), r.centery))
+            tx = r.x + px(58)
+            draw_text(surf, 'TDCaro', px(21), th['text'], (tx, r.centery + px(4)), 'black', 'bottomleft')
+            draw_text(surf, 'Luật chặn 2 đầu' if self.block else 'Nối 5 để thắng', px(12), th['text_dim'], (tx, r.centery + px(2)), 'regular', 'topleft')
+            mode = f'Online · {(self.ost or {}).get("code", "")}' if self.online else LEVEL_NAMES[self.level]
+            ts = text_surf(f'{self.N}×{self.N} · {mode}', px(12), th['text'], 'bold')
+            pr = pygame.Rect(0, 0, ts.get_width() + px(20), px(28))
+            pr.midright = r.midright
+            surf.blit(round_rect_surf(pr.w, pr.h, px(14), th['panel_alt'], th['border'], 1), pr)
+            surf.blit(ts, ts.get_rect(center=pr.center))
 
         # player cards + VS
         self.draw_player_card(surf, self.r_card_p, 'player', th, now)
@@ -2026,7 +2236,15 @@ class GameScreen:
         vr.center = vc
         surf.blit(round_rect_surf(vr.w, vr.h, px(16), th['panel'], th['border'], 1), vr)
         draw_text(surf, 'VS', px(11), th['text_dim'], vc, 'black', 'center')
+        for rt, lab in zip(self.r_stats, ('NƯỚC ĐI', 'VỪA ĐI', 'THỜI GIAN')):
+            surf.blit(round_rect_surf(rt.w, rt.h, px(14), th['panel_alt'], th['border'], 1), rt)
+            draw_spaced(surf, lab, px(9), th['text_dim'], (rt.centerx, rt.y + rt.h * 16 // 62), 'bold', px(1), 'center')
+        self.draw_history(surf, th)
+        for b in self.buttons:
+            b.draw(surf, th)
 
+    def draw_panel_dynamic(self, surf, th, now):
+        """Phan thay doi lien tuc: dong trang thai (dau cham), gia tri thong ke (dong ho)."""
         # status
         rs = self.r_status
         opp_label = self.opp_name() if self.online else 'AI'
@@ -2060,16 +2278,18 @@ class GameScreen:
                   (th['x'] if last[2] == 'player' else th['o']) if last else th['text_dim']),
                  ('THỜI GIAN', fmt_time(elapsed), th['text'])]
         for rt, (lab, val, col) in zip(self.r_stats, stats):
-            surf.blit(round_rect_surf(rt.w, rt.h, px(14), th['panel_alt'], th['border'], 1), rt)
-            draw_spaced(surf, lab, px(9), th['text_dim'], (rt.centerx, rt.y + px(16)), 'bold', px(1), 'center')
-            draw_text(surf, val, px(19), col, (rt.centerx, rt.y + px(41)), 'black', 'center')
+            draw_text(surf, val, px(19), col, (rt.centerx, rt.y + rt.h * 41 // 62), 'black', 'center')
 
-        # history
-        draw_spaced(surf, 'LỊCH SỬ NƯỚC ĐI', px(11), th['text_dim'], self.r_hist_title, 'bold')
+    def draw_history(self, surf, th):
+        # history (man doc: an)
         hr = self.r_hist
-        surf.blit(round_rect_surf(hr.w, hr.h, px(14), th['panel_alt'], th['border'], 1), hr)
         n = len(self.moves)
-        if n == 0:
+        if hr.h >= px(40):
+            draw_spaced(surf, 'LỊCH SỬ NƯỚC ĐI', px(11), th['text_dim'], self.r_hist_title, 'bold')
+            surf.blit(round_rect_surf(hr.w, hr.h, px(14), th['panel_alt'], th['border'], 1), hr)
+        if hr.h < px(40):
+            pass
+        elif n == 0:
             draw_text(surf, 'Chưa có nước đi nào', px(13), th['text_dim'], hr.center, 'regular', 'center')
         else:
             rowh = px(26)
@@ -2090,9 +2310,6 @@ class GameScreen:
                     latest = (k == n - 1)
                     draw_text(surf, coord_name(c, r), px(13), th['accent'] if latest else th['text'],
                               (x0 + px(20), y), 'black' if latest else 'semibold', 'midleft')
-
-        for b in self.buttons:
-            b.draw(surf, th)
 
     def draw_modal(self, surf, th, now):
         t = ease_out_cubic(clamp(self.modal_t, 0, 1))
@@ -2186,14 +2403,25 @@ class GameScreen:
         app, th, now = self.app, self.app.th, self.app.now
         W, H = app.size
         if BAKE:
-            key = ('game_static', W, H, th['key'], self.N, self.cell, tuple(self.slab), tuple(self.panel))
+            st = self.ost or {}
+            key = ('game', W, H, th['key'], self.N, self.cell, tuple(self.slab), tuple(self.panel), self.over,
+                   self.result, self.turn, tuple(app.scores.values()), len(self.moves), self.online,
+                   str(st.get('you')), str(st.get('opp')),
+                   tuple(('dyn', id(b)) if (b.h > 0.002 or b.down) else b.vis_key(th) for b in self.buttons))
+            dyn = [b for b in self.buttons if b.h > 0.002 or b.down]
 
             def paint(s):
-                s.blit(background(W, H, th), (0, 0))
-                app.floats.draw(s, th, 0.0)
-                self.draw_board_static(s, th)
-                self.draw_panel_static(s, th)
-            surf.blit(static_layer(key, (W, H), paint), (0, 0))
+                _SKIP_DRAW.update(dyn)
+                try:
+                    s.blit(background(W, H, th), (0, 0))
+                    app.floats.draw(s, th, 0.0)
+                    self.draw_board_static(s, th)
+                    self.draw_panel_static(s, th)
+                    self.draw_panel_semi(s, th, 0.0)
+                finally:
+                    _SKIP_DRAW.clear()
+            surf.blit(single_layer(self, key, (W, H), paint), (0, 0))
+            self._dyn_buttons = dyn
         else:
             surf.blit(background(W, H, th), (0, 0))
             app.floats.draw(surf, th, now)
@@ -2232,6 +2460,23 @@ class TextField:
 
     def handle(self, ev, now):
         if ev.type == pygame.MOUSEBUTTONDOWN and ev.button == 1:
+            if IS_WEB and UI.touch and self.rect.collidepoint(ev.pos):
+                # dien thoai: canvas khong goi duoc ban phim ao -> dung hop nhap cua trinh duyet
+                try:
+                    import platform as _pf
+                    from urllib.parse import quote, unquote
+                    # trao doi chuoi da ma hoa URL (ASCII) -> khong loi tieng Viet qua cau noi Python <-> JS
+                    kind = 'code' if self.upper else 'name'
+                    val = str(_pf.window.tdPrompt(kind, quote(self.text)))
+                    if val != '__cancel__' and val not in ('null', 'undefined'):
+                        self.text = ''
+                        self._accept(unquote(val))
+                        if self.on_enter and self.text:
+                            self.on_enter()
+                except Exception:
+                    pass
+                self.focus = False
+                return True
             was = self.focus
             self.focus = self.rect.collidepoint(ev.pos)
             self.sel_all = False
@@ -2390,7 +2635,36 @@ class LobbyScreen:
             self.app.start_online_game(st)
 
     # ---- bo cuc
+    def layout_portrait(self):
+        """Man hinh doc: o nhap va nut xep thanh tung hang rong."""
+        W, H = self.app.size
+        cw, ch = W - px(24), px(640)
+        self.card = pygame.Rect(px(12), max(px(12), (H - ch) // 2), cw, ch)
+        c = self.card
+        pad = px(22)
+        x, w = c.x + pad, c.w - 2 * pad
+        y = c.y + px(108)
+        self.lbl_name = (x, y)
+        self.name_f.rect = pygame.Rect(x, y + px(24), w, px(46))
+        y += px(24) + px(46) + px(22)
+        self.lbl_create = (x, y)
+        self.r_create_info = pygame.Rect(x, y + px(24), w, px(40))
+        self.btn_create.rect = pygame.Rect(x, y + px(24) + px(40) + px(8), w, px(46))
+        y += px(24) + px(40) + px(8) + px(46) + px(22)
+        self.lbl_join = (x, y)
+        self.code_f.rect = pygame.Rect(x, y + px(24), w, px(46))
+        self.btn_join.rect = pygame.Rect(x, y + px(24) + px(46) + px(8), w, px(46))
+        y += px(24) + px(46) + px(8) + px(46) + px(10)
+        self.r_err = pygame.Rect(x, y, w, px(24))
+        self.btn_back.rect = pygame.Rect(x, c.bottom - pad - px(44), w, px(44))
+        self.r_code = pygame.Rect(x, c.y + px(150), w, px(70))
+        hw = (w - px(10)) // 2
+        self.btn_copy.rect = pygame.Rect(x, c.y + px(330), hw, px(48))
+        self.btn_cancel.rect = pygame.Rect(x + hw + px(10), c.y + px(330), w - hw - px(10), px(48))
+
     def layout(self):
+        if UI.portrait:
+            return self.layout_portrait()
         W, H = self.app.size
         cw, ch = px(560), px(560)
         self.card = pygame.Rect((W - cw) // 2, (H - ch) // 2, cw, ch)
@@ -2494,7 +2768,8 @@ class LobbyScreen:
         a = 1.0 if st == 'online' else 0.45 + 0.55 * abs(math.sin(now * 3))
         pygame.draw.circle(surf, lerp_color(th['panel_alt'], col, a), (pr.x + px(15), pr.centery), max(3, px(4)))
         surf.blit(ts, ts.get_rect(midleft=(pr.x + px(25), pr.centery)))
-        draw_text(surf, 'Chơi cùng bạn bè qua Internet: một người tạo phòng, người kia nhập mã.', px(13),
+        draw_text(surf, 'Một người tạo phòng, người kia nhập mã.' if UI.portrait else
+                  'Chơi cùng bạn bè qua Internet: một người tạo phòng, người kia nhập mã.', px(13),
                   th['text_dim'], (c.x + pad, c.y + px(86)), 'regular', 'midleft')
 
         room = self.waiting_room()
@@ -2509,7 +2784,8 @@ class LobbyScreen:
             sett = app.settings
             info = f'Bàn {sett["size"]}×{sett["size"]}  ·  ' + ('Luật chặn 2 đầu' if sett['rule'] == 'block' else 'Luật tự do')
             draw_text(surf, info, px(14), th['text'], (r.x + px(14), r.centery), 'semibold', 'midleft')
-            draw_text(surf, 'đổi ở menu', px(11), th['text_dim'], (r.right - px(12), r.centery), 'regular', 'midright')
+            if not UI.portrait:
+                draw_text(surf, 'đổi ở menu', px(11), th['text_dim'], (r.right - px(12), r.centery), 'regular', 'midright')
             draw_spaced(surf, 'VÀO PHÒNG CỦA BẠN BÈ', px(11), th['text_dim'], self.lbl_join, 'bold')
             self.code_f.draw(surf, th, now, font_size=20, center=True)
             err = self.net.error if self.net else None
@@ -2537,15 +2813,18 @@ class LobbyScreen:
             draw_text(surf, ch, px(40), th['accent'], (br.centerx, br.centery - lift), 'black', 'center')
         sett = f'Bàn {room["size"]}×{room["size"]}  ·  ' + ('Luật chặn 2 đầu' if room['rule'] == 'block' else 'Luật tự do')
         draw_text(surf, sett, px(14), th['text'], (c.centerx, c.y + px(262)), 'semibold', 'center')
-        ts = text_surf('Gửi mã này cho bạn bè — đang chờ đối thủ vào phòng', px(13), th['text_dim'], 'regular')
+        ts = text_surf('Đang chờ đối thủ vào phòng' if UI.portrait else
+                       'Gửi mã này cho bạn bè — đang chờ đối thủ vào phòng', px(13), th['text_dim'], 'regular')
         x0 = c.centerx - (ts.get_width() + px(26)) // 2
         surf.blit(ts, ts.get_rect(midleft=(x0, c.y + px(292))))
         for i in range(3):
             dy = -abs(math.sin(now * 5 - i * 0.7)) * px(4)
             pygame.draw.circle(surf, th['accent'], (x0 + ts.get_width() + px(8) + i * px(8), c.y + px(296) + dy), max(2, px(3)))
-        draw_text(surf, 'Bạn bè mở TDCaro → Chơi online → nhập mã → Vào phòng', px(12), th['text_dim'],
+        draw_text(surf, 'Chơi online → nhập mã → Vào phòng' if UI.portrait else
+                  'Bạn bè mở TDCaro → Chơi online → nhập mã → Vào phòng', px(12), th['text_dim'],
                   (c.centerx, c.y + px(410)), 'regular', 'center')
-        draw_text(surf, 'Hãy giữ game mở — phòng chơi chạy ngay trên máy của bạn', px(12), th['gold'],
+        draw_text(surf, 'Giữ game mở — phòng chạy trên máy bạn' if UI.portrait else
+                  'Hãy giữ game mở — phòng chơi chạy ngay trên máy của bạn', px(12), th['gold'],
                   (c.centerx, c.y + px(432)), 'semibold', 'center')
 
 
@@ -2631,6 +2910,23 @@ def _web_flag(name):
         return f'{name}=1' in str(_pf.window.location.search)
     except Exception:
         return False
+
+
+_COARSE = None
+
+
+def _coarse_pointer():
+    """Thiet bi cam ung (web): con tro 'coarse'."""
+    global _COARSE
+    if _COARSE is None:
+        _COARSE = False
+        if IS_WEB:
+            try:
+                import platform as _pf
+                _COARSE = bool(_pf.window.matchMedia('(pointer: coarse)').matches)
+            except Exception:
+                _COARSE = False
+    return _COARSE
 
 
 def _web_title():
@@ -2732,7 +3028,13 @@ class App:
         # macOS: man hinh co kenh alpha -> blit trong suot len nen bi chep nguyen mau
         # (chu thanh thanh dac, bong do thanh khoi den). Canvas rieng giup moi nen tang giong nhau.
         self.canvas = pygame.Surface((W, H), 0, 32)
-        UI.s = clamp(min(W / BASE_W, H / BASE_H), 0.6, 3.0)
+        UI.portrait = H > W * 1.15
+        UI.touch = UI.portrait or _coarse_pointer()
+        if UI.portrait:
+            # bo cuc doc thiet ke cho be ngang ~440 don vi -> chu doc duoc tren dien thoai
+            UI.s = clamp(min(W / 440, H / 900), 0.6, 5.0)
+        else:
+            UI.s = clamp(min(W / BASE_W, H / BASE_H), 0.6, 3.0)
         clear_gfx()
         self.floats.reset(W, H)
         self.menu.layout()
@@ -3047,7 +3349,7 @@ class App:
         perf = _web_flag('perf')
         acc = [0.0, 0.0, 0.0, 0]
         while self.running:
-            dt = min(clock.tick(WEB_FPS) / 1000.0, 0.05)
+            dt = min(clock.tick(45 if UI.touch else WEB_FPS) / 1000.0, 0.05)
             if n < 2:
                 _wlog(f'frame {n}')
             t0 = time.perf_counter()

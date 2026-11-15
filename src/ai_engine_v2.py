@@ -290,6 +290,7 @@ class Engine:
         self.nodes = 0
         self.beam = (12, 8, 6, 5)
         self.max_ply = 12
+        self.tmask = 63          # kiem tra het gio moi 64 nut (ban chia doan: moi 8 nut)
 
     # ---------------- toa do
     def idx(self, r, c):
@@ -666,7 +667,7 @@ class Engine:
 
     def search(self, p, depth, alpha, beta, ply):
         self.nodes += 1
-        if (self.nodes & 63) == 0 and time.perf_counter() > self.deadline:
+        if (self.nodes & self.tmask) == 0 and time.perf_counter() > self.deadline:
             raise _Timeout
         o = 3 - p
         if depth <= 0 or ply >= self.max_ply:
@@ -959,6 +960,7 @@ def _search_steps(grid, col, level, block, sl):
     me = 1 if col == 'w' else 2
     op_ = 3 - me
     eng = Engine(grid, me, block)
+    eng.tmask = 7
     op = _opening(eng)
     if op:
         return op
@@ -999,15 +1001,22 @@ def _search_steps(grid, col, level, block, sl):
             if used > total:
                 safe.append(m)
                 continue
-            t0 = time.perf_counter()
-            eng.place(m, me)
-            try:
-                bad = eng.try_vcf(op_, d, per) is not None
-            finally:
-                eng.undo(m, me)
-            dt = time.perf_counter() - t0
-            used += dt
-            spent += dt
+            bad = False
+            used_m = 0.0
+            while used_m < per:                     # ngan sach `per` cho moi nuoc, chia doan <= sl
+                t0 = time.perf_counter()
+                eng.place(m, me)
+                try:
+                    bad = eng.try_vcf(op_, d, min(sl, per - used_m)) is not None
+                finally:
+                    eng.undo(m, me)
+                dt = time.perf_counter() - t0
+                used_m += dt
+                used += dt
+                spent += dt
+                if bad or not eng.vcf_timeout:
+                    break
+                yield
             if not bad:
                 safe.append(m)
             yield

@@ -352,6 +352,13 @@ function show_infobox() {
             },
         };
     })();
+    // TDCaro: hop nhap cua trinh duyet cho dien thoai (canvas khong goi duoc ban phim ao).
+    // Chuoi truyen qua lai dang ma hoa URL de khong loi tieng Viet.
+    window.tdPrompt = (kind, enc) => {
+        const msg = kind === "code" ? "Nhập mã phòng (6 ký tự)" : "Tên của bạn";
+        const v = window.prompt(msg, decodeURIComponent(enc || ""));
+        return v === null ? "__cancel__" : encodeURIComponent(v);
+    };
     window.tdMusic = (() => {
         const a = new Audio(); a.preload = "auto"; let ended = false;
         a.addEventListener("ended", () => { ended = true; });

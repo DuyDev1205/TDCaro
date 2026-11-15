@@ -48,7 +48,11 @@ def main():
     import re
     src = open(os.path.join(ROOT, 'src', 'Finals.py'), encoding='utf-8').read()
     ver = re.search(r"^APP_VERSION = '([^']+)'", src, re.M).group(1)
-    stamp = f'{ver}-{int(os.path.getmtime(os.path.join(APP, "src", "Finals.py")))}'
+    import hashlib
+    h = hashlib.sha1()
+    for f in SRC_FILES + ['../web/main.py', '../web/tdcaro.tmpl']:
+        h.update(open(os.path.join(ROOT, 'src', f), 'rb').read())
+    stamp = f'{ver}-{h.hexdigest()[:8]}'            # doi bat ky file nguon nao -> ten goi moi
     new_name = f'web_app-{stamp}.tar.gz'
     os.replace(os.path.join(out, 'web_app.tar.gz'), os.path.join(out, new_name))
     idx = os.path.join(out, 'index.html')

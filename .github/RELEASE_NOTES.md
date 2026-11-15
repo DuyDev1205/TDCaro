@@ -10,6 +10,8 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Giao diện điện thoại:** cầm dọc có bố cục 1 cột riêng (chữ to, dễ chạm), chạm ô tên/mã phòng hiện bàn phím của máy
+- **Web mượt hơn:** điện thoại ~21 → ~39 khung hình/giây; máy suy nghĩ không còn khựng lâu
 - **Phím tắt âm thanh:** `M` bật/tắt âm thanh, `B` bật/tắt nhạc nền, `K` đổi bài — dùng được ở mọi màn hình, nhãn phím hiện rõ trên các nút, có thông báo khi bấm
 - **Web:** máy suy nghĩ mà màn hình không còn đứng hình (AI tính từng đoạn ngắn xen kẽ với vẽ, sức mạnh giữ nguyên)
 - **Sửa lỗi AI (Khó/Cực khó):** khi tìm chuỗi ép thắng bị hết giờ, bàn cờ nội bộ có thể còn sót quân thử — đã sửa

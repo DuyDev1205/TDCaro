@@ -19,7 +19,7 @@
 ## Tính năng
 
 - **Chơi online 1 vs 1 (P2P)**: một người tạo phòng (mã 6 ký tự), người kia nhập mã để vào — không cần server riêng, chơi chéo giữa bản máy tính và bản web
-- **Bản web**: chơi ngay trên trình duyệt, không cần cài đặt (GitHub Pages)
+- **Bản web**: chơi ngay trên trình duyệt, không cần cài đặt (GitHub Pages) — có giao diện riêng cho điện thoại cầm dọc
 
 - **Luật chơi**: *Chặn 2 đầu* (mặc định — dãy 5 bị quân đối thủ chặn cả hai đầu không thắng, mép bàn không tính là chặn) hoặc *Tự do*; AI mức Bình thường/Khó/Cực khó hiểu luật này
 - **4 mức độ AI**: Dễ · Bình thường · Khó · Cực khó (xem chi tiết bên dưới)
