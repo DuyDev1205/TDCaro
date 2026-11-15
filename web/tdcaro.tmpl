@@ -206,7 +206,9 @@ function show_infobox() {
 
         #infobox {
             position: fixed; /* center relative to viewport */
-            left: 50%; top: 50%; transform: translate(-50%, -50%);
+            /* pygbag tu gan left/top (inline) -> !important de chi con 1 cach can giua */
+            left: 50% !important; top: 50% !important; transform: translate(-50%, -50%);
+            max-width: 86vw; text-align: center; white-space: nowrap;
             background: #1b1f3b;
             color: #eef1ff;
             border: 1px solid #3b3f6b;
@@ -423,7 +425,7 @@ height="{{cookiecutter.height}}px"
     oncontextmenu="event.preventDefault()" tabindex=1 hidden>
     </canvas>
 
-    <div id="infobox">Đang tải TDCaro…</div>
+    <div id="infobox">Đang tải TD Caro…</div>
 
     <div id=html></div>
 
