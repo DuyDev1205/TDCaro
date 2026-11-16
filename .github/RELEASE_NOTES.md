@@ -10,6 +10,8 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Thêm vào màn hình chính (điện thoại):** có biểu tượng TD Caro, mở lên chạy toàn màn hình như ứng dụng
+- **Điện thoại:** viền quanh bàn cờ mỏng hơn → bàn cờ to thêm (nhất là khi cầm ngang)
 - **Điện thoại: bàn cờ và quân to hơn** — bàn cờ rộng hết cỡ (cầm dọc gần kín bề ngang, cầm ngang cao hết màn hình); chỉ giữ ngoài các nút hay dùng *Ván mới · Đi lại · Gợi ý* (có biểu tượng), còn Âm thanh, Nhạc nền, Giao diện, Toàn màn hình, Về menu gom vào nút **☰** — chạm để bung ra; quân cờ to hơn trong ô
 - **Web:** các ký hiệu X/O ở nền trôi mượt như bản máy tính (trước bị đứng rồi nhảy cóc)
 - **Web:** dòng "Đang tải TD Caro…" nằm chính giữa màn hình trên điện thoại

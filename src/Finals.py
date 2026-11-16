@@ -2055,8 +2055,8 @@ class GameScreen:
     def _place_board(self, x, y, size):
         """Dat ban co vuong canh `size` (gom ca nhan toa do o canh trai + tren) tai (x, y)."""
         N = self.N
-        lm, pad, depth = px(14), px(5), px(5)
-        self.lab_off = (px(8), px(8))
+        lm, pad, depth = px(11), px(3), px(3)          # vien sat nhat co the -> o co to nhat
+        self.lab_off = (px(6), px(6))
         self.pad, self.depth = pad, depth
         self.cell = max(10, int((size - lm - depth - 2 * pad) // N))
         sw = self.cell * N + 2 * pad
@@ -2068,7 +2068,7 @@ class GameScreen:
     def layout_portrait(self):
         """Dien thoai cam doc: ban co rong het be ngang; ben duoi chi con the nguoi choi, trang thai va 1 hang nut."""
         W, H = self.app.size
-        m, pd, g = px(4), px(8), px(6)
+        m, pd, g = px(3), px(8), px(6)
         ch, sh, bh = px(54), px(24), px(46)
         ph = 2 * pd + ch + g + sh + g + bh
         self.panel = pygame.Rect(m, H - m - ph, W - 2 * m, ph)
@@ -2093,7 +2093,7 @@ class GameScreen:
     def layout_land_compact(self):
         """Dien thoai cam ngang: ban co cao het man hinh ben trai, bang gon ben phai."""
         W, H = self.app.size
-        m, pd, g = px(4), px(10), px(6)
+        m, pd, g = px(2), px(10), px(6)
         used = self._place_board(m, m, H - 2 * m)
         self.area = pygame.Rect(m, m, used, H - 2 * m)
         px0 = m + used + px(8)
@@ -2380,7 +2380,7 @@ class GameScreen:
         sh, pad = shadow_surf(slab.w, slab.h + self.depth, px(18), px(26), th['shadow_alpha'])
         surf.blit(sh, (slab.x - pad, slab.y - pad + px(14)))
         surf.blit(self.board_surface(th), slab.topleft)
-        fs = int(clamp(cell * 0.3, px(9 if UI.compact else 10), px(15)))
+        fs = int(clamp(cell * 0.3, px(8), px(10))) if UI.compact else int(clamp(cell * 0.3, px(10), px(15)))
         oy, ox = getattr(self, 'lab_off', (px(14), px(16)))
         for i in range(self.N):
             cx, cy = self.cell_center(i, i)

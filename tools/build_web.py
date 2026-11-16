@@ -41,6 +41,9 @@ def main():
     out = os.path.join(APP, 'build', 'web')
     shutil.copy2(os.path.join(ROOT, 'assets', 'icon.png'), os.path.join(out, 'favicon.png'))
     shutil.copytree(os.path.join(ROOT, 'assets', 'music'), os.path.join(out, 'music'), dirs_exist_ok=True)
+    # them vao man hinh chinh: bieu tuong + manifest
+    shutil.copytree(os.path.join(ROOT, 'web', 'icons'), os.path.join(out, 'icons'), dirs_exist_ok=True)
+    shutil.copy2(os.path.join(ROOT, 'web', 'manifest.webmanifest'), os.path.join(out, 'manifest.webmanifest'))
     for extra in ('web_app.apk',):            # GitHub Pages chi can .tar.gz (.apk danh cho itch.io)
         if os.path.exists(os.path.join(out, extra)):
             os.remove(os.path.join(out, extra))
