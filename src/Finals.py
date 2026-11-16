@@ -407,6 +407,8 @@ THEME_KEYS = list(THEME_DEFS)
 # ------------------------------ UI scale ----------------------------------
 
 class UI:
+    compact = False        # man choi gon tren dien thoai (doc hoac ngang): nhuong cho cho ban co
+    land_compact = False   # dien thoai cam ngang (cam ung, ti le >= 1.6)
     portrait = False       # man hinh doc (dien thoai cam doc) -> bo cuc 1 cot
     touch = False          # man hinh cam ung / doc -> an nhan phim tat, dung hop nhap cua trinh duyet
     s = 1.0
@@ -1554,12 +1556,15 @@ class GameScreen:
         self.btn_undo = Button('Đi lại', self.undo, hotkey='U', enabled=self.can_undo, font_size=14)
         self.btn_hint = Button('Gợi ý', self.request_hint, hotkey='H', enabled=self.can_hint, font_size=14)
         self.btn_theme = Button('Giao diện', app.cycle_theme, hotkey='T', font_size=14)
-        self.btn_sound = Button(lambda: 'Âm thanh: Bật' if st['sound'] else 'Âm thanh: Tắt',
+        self.btn_sound = Button(lambda: (('Âm: Bật' if st['sound'] else 'Âm: Tắt') if UI.compact else
+                                         ('Âm thanh: Bật' if st['sound'] else 'Âm thanh: Tắt')),
                                 app.toggle_sound, hotkey='M', font_size=14)
-        self.btn_menu = Button(lambda: 'Rời phòng' if self.online else 'Về menu', self.go_back, hotkey='ESC', font_size=14)
-        self.btn_full = Button(lambda: 'Thu nhỏ' if app.fullscreen else 'Toàn màn hình',
+        self.btn_menu = Button(lambda: 'Rời phòng' if self.online else ('Menu' if UI.compact else 'Về menu'),
+                               self.go_back, hotkey='ESC', font_size=14)
+        self.btn_full = Button(lambda: 'Thu nhỏ' if app.fullscreen else ('Phóng to' if UI.compact else 'Toàn màn hình'),
                                app.toggle_fullscreen, hotkey='F11', font_size=14)
-        self.btn_music = Button(lambda: 'Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt',
+        self.btn_music = Button(lambda: (('Nhạc: Bật' if st['music'] else 'Nhạc: Tắt') if UI.compact else
+                                         ('Nhạc nền: Bật' if st['music'] else 'Nhạc nền: Tắt')),
                                 app.toggle_music, hotkey='B', font_size=14)
         self.buttons = [self.btn_new, self.btn_undo, self.btn_hint, self.btn_theme, self.btn_sound, self.btn_menu,
                         self.btn_full, self.btn_music]
@@ -1856,53 +1861,85 @@ class GameScreen:
         self.toast = (txt, self.app.now)
 
     # ------------------------------------------------------------ layout
-    def layout_portrait(self):
-        """Man hinh doc: ban co o tren, bang dieu khien gon o duoi."""
-        W, H = self.app.size
-        m = px(10)
-        pd, g, bh = px(12), px(8), px(42)
-        ch = px(112)
-        panel_h = 2 * pd + ch + g + px(26) + g + px(54) + px(10) + 3 * bh + 2 * g
-        self.panel = pygame.Rect(m, H - m - panel_h, W - 2 * m, panel_h)
-        self.area = pygame.Rect(m, m, W - 2 * m, self.panel.y - 2 * m)
-        N = self.N
-        lm, pad, depth = px(20), px(10), px(8)
-        avail = min(self.area.w - 2 * lm, self.area.h - lm - depth - px(4)) - 2 * pad
-        self.cell = max(10, int(avail // N))
-        sw = self.cell * N + 2 * pad
-        self.pad, self.depth = pad, depth
-        top = self.area.y + lm + max(0, (self.area.h - lm - depth - sw) // 2)
-        self.slab = pygame.Rect(self.area.centerx - sw // 2, top, sw, sw)
-        self.gx, self.gy = self.slab.x + pad, self.slab.y + pad
-        self.line_layer = pygame.Surface(self.slab.size, pygame.SRCALPHA, 32)
-        p = self.panel
-        x, w, y = p.x + pd, p.w - 2 * pd, p.y + pd
-        self.r_header = pygame.Rect(x, y, w, 0)                 # doc: bo tieu de trong bang
-        cw = (w - px(12)) // 2
+    def _compact_panel(self, x, y, w, h_hist):
+        """Bang dieu khien gon: the nguoi choi ngang mong, thong ke thap, nut 2 hang x 4."""
+        g, bh, ch = px(6), px(40), px(62)
+        self.r_header = pygame.Rect(x, y, w, 0)
+        cw = (w - px(10)) // 2
         self.r_card_p = pygame.Rect(x, y, cw, ch)
-        self.r_card_a = pygame.Rect(x + cw + px(12), y, w - cw - px(12), ch)
+        self.r_card_a = pygame.Rect(x + cw + px(10), y, w - cw - px(10), ch)
         y += ch + g
-        self.r_status = pygame.Rect(x, y, w, px(26))
-        y += px(26) + g
+        self.r_status = pygame.Rect(x, y, w, px(24))
+        y += px(24) + g
         tw = (w - 2 * g) // 3
-        self.r_stats = [pygame.Rect(x + i * (tw + g), y, tw, px(54)) for i in range(3)]
-        y += px(54) + px(10)
+        self.r_stats = [pygame.Rect(x + i * (tw + g), y, tw, px(42)) for i in range(3)]
+        y += px(42) + px(8)
         self.r_hist_title = (x, y)
-        self.r_hist = pygame.Rect(x, y, w, 0)                   # doc: an lich su
-        c3 = (w - 2 * g) // 3
-        rows = [[self.btn_new, self.btn_undo, self.btn_hint],
-                [self.btn_sound, self.btn_music, self.btn_theme]]
+        self.r_hist = pygame.Rect(x, y + px(20), w, max(0, h_hist - px(20))) if h_hist >= px(70) else pygame.Rect(x, y, w, 0)
+        y += h_hist + (px(8) if h_hist >= px(70) else 0)
+        c4 = (w - 3 * g) // 4
+        rows = [[self.btn_new, self.btn_undo, self.btn_hint, self.btn_menu],
+                [self.btn_sound, self.btn_music, self.btn_theme, self.btn_full]]
         for row in rows:
             for i, b in enumerate(row):
-                b.rect = pygame.Rect(x + i * (c3 + g), y, c3 if i < 2 else w - 2 * (c3 + g), bh)
+                b.rect = pygame.Rect(x + i * (c4 + g), y, c4 if i < 3 else w - 3 * (c4 + g), bh)
             y += bh + g
-        half = (w - g) // 2
-        self.btn_full.rect = pygame.Rect(x, y, half, bh)
-        self.btn_menu.rect = pygame.Rect(x + half + g, y, w - half - g, bh)
+
+    @staticmethod
+    def compact_panel_h(h_hist=0):
+        return px(62) + px(6) + px(24) + px(6) + px(42) + px(8) + h_hist + 2 * px(40) + px(6)
+
+    def _place_board(self, x, y, size):
+        """Dat ban co vuong canh `size` (gom ca nhan toa do o canh trai + tren) tai (x, y)."""
+        N = self.N
+        lm, pad, depth = px(16), px(6), px(6)
+        self.lab_off = (px(9), px(9))
+        self.pad, self.depth = pad, depth
+        self.cell = max(10, int((size - lm - depth - 2 * pad) // N))
+        sw = self.cell * N + 2 * pad
+        self.slab = pygame.Rect(x + lm, y + lm, sw, sw)
+        self.gx, self.gy = self.slab.x + pad, self.slab.y + pad
+        self.line_layer = pygame.Surface(self.slab.size, pygame.SRCALPHA, 32)
+        return lm + sw + depth
+
+    def layout_portrait(self):
+        """Dien thoai cam doc: ban co rong gan het be ngang, bang dieu khien gon ben duoi."""
+        W, H = self.app.size
+        m, pd = px(6), px(10)
+        ph = 2 * pd + self.compact_panel_h()
+        self.panel = pygame.Rect(m, H - m - ph, W - 2 * m, ph)
+        avail_h = self.panel.y - m - px(6)
+        size = min(W - 2 * m, avail_h)
+        used = self._place_board(0, 0, size)
+        # can giua theo chieu ngang, sat tren
+        dx = (W - used) // 2 - 0
+        dy = m + max(0, (avail_h - used) // 2)
+        self.slab.move_ip(dx, dy)
+        self.gx, self.gy = self.slab.x + self.pad, self.slab.y + self.pad
+        self.area = pygame.Rect(m, m, W - 2 * m, avail_h)
+        p = self.panel
+        self._compact_panel(p.x + pd, p.y + pd, p.w - 2 * pd, 0)
+
+    def layout_land_compact(self):
+        """Dien thoai cam ngang: ban co cao het man hinh ben trai, bang gon ben phai."""
+        W, H = self.app.size
+        m, pd = px(6), px(10)
+        used = self._place_board(m, m, H - 2 * m)
+        self.area = pygame.Rect(m, m, used, H - 2 * m)
+        px0 = m + used + px(10)
+        self.panel = pygame.Rect(px0, m, W - px0 - m, H - 2 * m)
+        p = self.panel
+        h_hist = p.h - 2 * pd - self.compact_panel_h()
+        self._compact_panel(p.x + pd, p.y + pd, p.w - 2 * pd, max(0, h_hist))
 
     def layout(self):
+        UI.compact = UI.portrait or UI.land_compact
+        self.piece_k = 0.86 if UI.compact else 0.78
         if UI.portrait:
             return self.layout_portrait()
+        if UI.land_compact:
+            return self.layout_land_compact()
+        self.lab_off = (px(14), px(16))
         W, H = self.app.size
         m = px(24)
         pw = px(340)
@@ -2137,11 +2174,12 @@ class GameScreen:
         sh, pad = shadow_surf(slab.w, slab.h + self.depth, px(18), px(26), th['shadow_alpha'])
         surf.blit(sh, (slab.x - pad, slab.y - pad + px(14)))
         surf.blit(self.board_surface(th), slab.topleft)
-        fs = int(clamp(cell * 0.3, px(10), px(15)))
+        fs = int(clamp(cell * 0.3, px(9 if UI.compact else 10), px(15)))
+        oy, ox = getattr(self, 'lab_off', (px(14), px(16)))
         for i in range(self.N):
             cx, cy = self.cell_center(i, i)
-            draw_text(surf, COL_LETTERS[i], fs, th['bg_text_dim'], (cx, slab.y - px(14)), 'bold', 'center')
-            draw_text(surf, str(i + 1), fs, th['bg_text_dim'], (slab.x - px(16), cy), 'bold', 'center')
+            draw_text(surf, COL_LETTERS[i], fs, th['bg_text_dim'], (cx, slab.y - oy), 'bold', 'center')
+            draw_text(surf, str(i + 1), fs, th['bg_text_dim'], (slab.x - ox, cy), 'bold', 'center')
 
     def draw_board(self, surf, th, now):
         slab, cell = self.slab, self.cell
@@ -2151,7 +2189,7 @@ class GameScreen:
         gap = max(1, round(cell * 0.05))
         tsz = cell - 2 * gap
         trad = max(2, int(cell * 0.2))
-        psize = int(cell * 0.78)
+        psize = int(cell * getattr(self, 'piece_k', 0.78))
 
         # goi y
         if self.hint:
@@ -2229,12 +2267,16 @@ class GameScreen:
         bg = lerp_color(th['panel_alt'], color, 0.07) if hl else th['panel_alt']
         surf.blit(round_rect_surf(r.w, r.h, px(16), bg, color if hl else th['border'], px(2) if hl else 1), r)
         bob = math.sin(now * 4) * px(2) if (active and not BAKE) else 0
-        blit_center(surf, themed_piece(kind, px(34), th), (r.centerx, r.y + px(32) + bob))
+        thin = r.h < px(90)              # the mong (man gon): quan | ten / diem tren 1 dong
+        if thin:
+            blit_center(surf, themed_piece(kind, px(30), th), (r.x + px(26), r.centery + bob))
+        else:
+            blit_center(surf, themed_piece(kind, px(34), th), (r.centerx, r.y + px(32) + bob))
         if self.online:
             st = self.ost or {}
             pl = st.get('you') if who == 'player' else st.get('opp')
             name = 'BẠN' if who == 'player' else (pl['name'].upper() if pl else 'ĐANG CHỜ…')
-            while text_surf(name, px(11), th['text_dim'], 'bold').get_width() > r.w - px(24) and len(name) > 3:
+            while text_surf(name, px(11), th['text_dim'], 'bold').get_width() > r.w - px(24 if not thin else 100) and len(name) > 3:
                 name = name[:-2] + '…'
             sc = pl['score'] if pl else 0
             if who == 'ai' and pl and not pl.get('online'):
@@ -2246,8 +2288,12 @@ class GameScreen:
         else:
             name = 'BẠN' if who == 'player' else 'MÁY (AI)'
             sc = self.app.scores['player' if who == 'player' else 'ai']
-        draw_spaced(surf, name, px(11), th['text_dim'], (r.centerx, r.y + px(64)), 'bold', anchor='center')
-        draw_text(surf, str(sc), px(30), color if hl else th['text'], (r.centerx, r.y + px(96)), 'black', 'center')
+        if thin:
+            draw_spaced(surf, name, px(10), th['text_dim'], (r.x + px(50), r.centery), 'bold', anchor='midleft')
+            draw_text(surf, str(sc), px(26), color if hl else th['text'], (r.right - px(14), r.centery), 'black', 'midright')
+        else:
+            draw_spaced(surf, name, px(11), th['text_dim'], (r.centerx, r.y + px(64)), 'bold', anchor='center')
+            draw_text(surf, str(sc), px(30), color if hl else th['text'], (r.centerx, r.y + px(96)), 'black', 'center')
         if active or won:
             tag = 'ĐẾN LƯỢT' if active else 'CHIẾN THẮNG'
             ts = spaced_text_surf(tag, px(9), th['on_accent'], 'bold', px(1))
@@ -3063,7 +3109,7 @@ class App:
         self.game = GameScreen(self)
         self.net = None                  # online.OnlineClient (tao khi vao "Choi online")
         self.lobby = LobbyScreen(self)
-        self.state = 'menu'
+        self._state = 'menu'
         self.cursor_hand = None
         self.fullscreen = False
         _wlog('on_resize')
@@ -3083,6 +3129,35 @@ class App:
     def current(self):
         return {'menu': self.menu, 'game': self.game, 'lobby': self.lobby}[self.state]
 
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        """Doi man hinh. Dien thoai cam ngang: man choi dung ti le rieng (theo chieu cao) -> ban co to, chu doc duoc."""
+        self._state = value
+        if not hasattr(self, 'lobby'):
+            return
+        s_new = self.scale_for(value)
+        if abs(s_new - UI.s) > 1e-6:
+            UI.s = s_new
+            clear_gfx()
+            W, H = self.size
+            self.floats.reset(W, H)
+            self.menu.layout()
+            self.game.layout()
+            self.lobby.layout()
+
+    def scale_for(self, state):
+        W, H = self.size
+        if UI.portrait:
+            # bo cuc doc thiet ke cho be ngang ~440 don vi -> chu doc duoc tren dien thoai
+            return clamp(min(W / 440, H / 900), 0.6, 5.0)
+        if UI.land_compact and state == 'game':
+            return clamp(H / 430, 0.6, 5.0)
+        return clamp(min(W / BASE_W, H / BASE_H), 0.6, 3.0)
+
     def on_resize(self):
         self.screen = pygame.display.get_surface()
         W, H = self.size
@@ -3092,11 +3167,8 @@ class App:
         self.canvas = pygame.Surface((W, H), 0, 32)
         UI.portrait = H > W * 1.15
         UI.touch = UI.portrait or _coarse_pointer()
-        if UI.portrait:
-            # bo cuc doc thiet ke cho be ngang ~440 don vi -> chu doc duoc tren dien thoai
-            UI.s = clamp(min(W / 440, H / 900), 0.6, 5.0)
-        else:
-            UI.s = clamp(min(W / BASE_W, H / BASE_H), 0.6, 3.0)
+        UI.land_compact = (not UI.portrait) and _coarse_pointer() and W >= H * 1.6
+        UI.s = self.scale_for(self.state)
         clear_gfx()
         self.floats.reset(W, H)
         self.menu.layout()

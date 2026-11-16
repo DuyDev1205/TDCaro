@@ -10,6 +10,7 @@ Trên macOS: mở .dmg, kéo **TDCaro** vào Applications, lần đầu mở hã
 Nếu báo "damaged": `xattr -cr "/Applications/TDCaro.app"`
 
 ### Có gì mới
+- **Điện thoại: bàn cờ và quân to hơn** — cầm dọc: bàn cờ gần kín bề ngang, bảng điều khiển gọn lại (thẻ người chơi 1 dòng, nút 2 hàng); cầm ngang: bàn cờ cao hết màn hình bên trái, bảng gọn bên phải; quân cờ to hơn trong ô
 - **Web:** các ký hiệu X/O ở nền trôi mượt như bản máy tính (trước bị đứng rồi nhảy cóc)
 - **Web:** dòng "Đang tải TD Caro…" nằm chính giữa màn hình trên điện thoại
 - **Giao diện điện thoại:** cầm dọc có bố cục 1 cột riêng (chữ to, dễ chạm), chạm ô tên/mã phòng hiện bàn phím của máy
